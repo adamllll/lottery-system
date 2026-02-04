@@ -1,5 +1,6 @@
 package org.adam.lotterysystem;
 
+import org.adam.lotterysystem.dao.dataobject.Encrypt;
 import org.adam.lotterysystem.dao.mapper.UserMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -15,5 +16,11 @@ public class SqlTest {
     void mailCount() {
         int count = userMapper.countByMail("123@mail.com");
         System.out.println("mailCount = " + count);
+    }
+
+    @Test
+    void phoneCount() {
+        int count = userMapper.countByPhoneNumber(new Encrypt("12345678901"));
+        System.out.println("phoneCount = " + count);
     }
 }

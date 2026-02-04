@@ -1,5 +1,6 @@
 package org.adam.lotterysystem.common.pojo;
 
+import org.adam.lotterysystem.common.errorcode.ErrorCode;
 import org.adam.lotterysystem.common.errorcode.GlobalErrorCodeConstants;
 import org.springframework.util.Assert;
 
@@ -63,5 +64,9 @@ public class CommonResult<T> implements Serializable {
 
     public static <T> CommonResult<T> error(String msg) {
         return error(GlobalErrorCodeConstants.UNKOWN.getCode(), msg);
+    }
+
+    public static <T> CommonResult<T> error(ErrorCode errorCode) {
+        return error(errorCode.getCode(), errorCode.getMsg());
     }
 }
