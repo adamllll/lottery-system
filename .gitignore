@@ -35,3 +35,8 @@ build/
 ### Project specific ###
 docs/
 .claude/
+
+### Env files ###
+.env
+.env.*
+!.env.example
