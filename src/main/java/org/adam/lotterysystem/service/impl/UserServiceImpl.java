@@ -78,7 +78,7 @@ public class UserServiceImpl implements UserService {
         }
         // 校验手机号是否被使用
         if (checkPhoneNumberUsed(param.getPhoneNumber())) {
-            throw new ServiceException(ServiceErrorCodeConstants.REGISTER_Phone_USED);
+            throw new ServiceException(ServiceErrorCodeConstants.REGISTER_PHONE_USED);
         }
     }
 
