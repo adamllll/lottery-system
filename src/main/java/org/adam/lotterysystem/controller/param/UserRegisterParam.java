@@ -15,6 +15,9 @@ public class UserRegisterParam implements Serializable {
     // 手机号
     @NotBlank(message = "手机号不能为空！")
     private String phoneNumber;
+    // 短信验证码
+    @NotBlank(message = "验证码不能为空！")
+    private String verificationCode;
     // 密码
     private String password;
     // 身份信息

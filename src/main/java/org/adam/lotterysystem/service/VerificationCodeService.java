@@ -8,9 +8,10 @@ public interface VerificationCodeService {
     void sendVerificationCode(String phoneNumber);
 
     /**
-     * 获取验证码
+     * 核验验证码
      * @param phoneNumber
+     * @param code
      * @return
      */
-    String getVerificationCode(String phoneNumber);
+    boolean checkVerificationCode(String phoneNumber, String code);
 }
