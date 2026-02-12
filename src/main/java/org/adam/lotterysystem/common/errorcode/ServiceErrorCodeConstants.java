@@ -10,6 +10,11 @@ public interface ServiceErrorCodeConstants {
     ErrorCode REGISTER_PASSWORD_ERROR = new ErrorCode(105, "注册密码格式错误，密码长度不能少于6位");
     ErrorCode REGISTER_MAIL_USED = new ErrorCode(106, "注册邮箱已被使用");
     ErrorCode REGISTER_PHONE_USED = new ErrorCode(107, "注册手机号已被使用");
+    ErrorCode LOGIN_INFO_NOT_EXIST = new ErrorCode(108, "登录信息不存在");
+    ErrorCode LOGIN_TYPE_NOT_EXIST = new ErrorCode(109, "登录方式不存在");
+    ErrorCode LOGIN_USERINFO_NOT_EXIST = new ErrorCode(110, "登录用户信息不存在");
+    ErrorCode LOGIN_IDENTITY_ERROR = new ErrorCode(111, "登录身份信息错误");
+    ErrorCode LOGIN_PASSWORD_ERROR = new ErrorCode(112, "登录密码错误");
 
     // 通用校验错误码
     ErrorCode PHONE_FORMAT_ERROR = new ErrorCode(108, "手机号格式错误");

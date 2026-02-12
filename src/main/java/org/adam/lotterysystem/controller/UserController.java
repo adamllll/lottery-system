@@ -3,10 +3,15 @@ package org.adam.lotterysystem.controller;
 import org.adam.lotterysystem.common.errorcode.ControllerErrorCodeConstants;
 import org.adam.lotterysystem.common.exception.ControllerException;
 import org.adam.lotterysystem.common.pojo.CommonResult;
+import org.adam.lotterysystem.common.utils.JacksonUtil;
+import org.adam.lotterysystem.controller.param.ShortPasswordLogin;
+import org.adam.lotterysystem.controller.param.UserPasswordLoginParam;
 import org.adam.lotterysystem.controller.param.UserRegisterParam;
+import org.adam.lotterysystem.controller.result.UserLoginResult;
 import org.adam.lotterysystem.controller.result.UserRegisterResult;
 import org.adam.lotterysystem.service.UserService;
 import org.adam.lotterysystem.service.VerificationCodeService;
+import org.adam.lotterysystem.service.dto.UserLoginDTO;
 import org.adam.lotterysystem.service.dto.UserRegisterDTO;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -59,6 +64,39 @@ public class UserController {
         return CommonResult.success(true);
     }
 
+    /**
+     * 密码登录
+     * @param param
+     * @return
+     */
+    @RequestMapping("/password/login")
+    public CommonResult<UserLoginResult> userPasswordLogin(@Validated @RequestBody UserPasswordLoginParam param) {
+        logger.info("密码登录, UserPasswordLoginParam={}", JacksonUtil.writeValueAsString(param));
+        UserLoginDTO userLoginDTO = userService.login(param);
+        return CommonResult.success(converToUserLoginResult(userLoginDTO));
+    }
+
+    /**
+     * 验证码登录
+     * @param param
+     * @return
+     */
+    @RequestMapping("/message/login")
+    public CommonResult<UserLoginResult> shortPasswordLogin(@Validated @RequestBody ShortPasswordLogin param) {
+        logger.info("密码登录, shortPasswordLogin={}", JacksonUtil.writeValueAsString(param));
+        UserLoginDTO userLoginDTO = userService.login(param);
+        return CommonResult.success(converToUserLoginResult(userLoginDTO));
+    }
+
+    private UserLoginResult converToUserLoginResult(UserLoginDTO userLoginDTO) {
+        if (null == userLoginDTO) {
+            throw new ControllerException(ControllerErrorCodeConstants.LOGIN_ERROR);
+        }
+        UserLoginResult result = new UserLoginResult();
+        result.setToken(userLoginDTO.getToken());
+        result.setIdentity(userLoginDTO.getIdentity().name());
+        return result;
+    }
     /**
      * 核验验证码
      * @param phoneNumber 手机号

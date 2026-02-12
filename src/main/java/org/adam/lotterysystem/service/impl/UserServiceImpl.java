@@ -4,17 +4,25 @@ import cn.hutool.crypto.digest.DigestUtil;
 import jakarta.validation.constraints.NotBlank;
 import org.adam.lotterysystem.common.errorcode.ServiceErrorCodeConstants;
 import org.adam.lotterysystem.common.exception.ServiceException;
+import org.adam.lotterysystem.common.utils.JWTUtil;
 import org.adam.lotterysystem.common.utils.RegexUtil;
+import org.adam.lotterysystem.controller.param.ShortPasswordLogin;
+import org.adam.lotterysystem.controller.param.UserLoginParam;
+import org.adam.lotterysystem.controller.param.UserPasswordLoginParam;
 import org.adam.lotterysystem.controller.param.UserRegisterParam;
 import org.adam.lotterysystem.dao.dataobject.Encrypt;
 import org.adam.lotterysystem.dao.dataobject.UserDO;
 import org.adam.lotterysystem.dao.mapper.UserMapper;
 import org.adam.lotterysystem.service.UserService;
+import org.adam.lotterysystem.service.dto.UserLoginDTO;
 import org.adam.lotterysystem.service.dto.UserRegisterDTO;
 import org.adam.lotterysystem.service.enums.UserIdentityEnum;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
+
+import java.util.HashMap;
+import java.util.Map;
 
 @Service
 public class UserServiceImpl implements UserService {
@@ -100,5 +108,74 @@ public class UserServiceImpl implements UserService {
     private boolean checkPhoneNumberUsed(@NotBlank(message = "手机号不能为空！") String phoneNumber) {
         int count = userMapper.countByPhoneNumber(new Encrypt(phoneNumber));
         return count > 0;
+    }
+
+    @Override
+    public UserLoginDTO login(UserLoginParam param) {
+        UserLoginDTO userLoginDTO;
+        // 类型检查与类型转换(java14及以上 支持instanceof模式匹配)
+        if (param instanceof UserPasswordLoginParam loginParam) {
+            // 密码登录流程
+            userLoginDTO = loginByUserPassword(loginParam);
+        } else if (param instanceof ShortPasswordLogin loginParam) {
+            // 短信验证码登录
+            userLoginDTO = loginByShortMessage(loginParam);
+        } else {
+            throw new ServiceException(ServiceErrorCodeConstants.LOGIN_INFO_NOT_EXIST);
+        }
+        return userLoginDTO;
+    }
+
+    /**
+     * 密码登录流程
+     * @param loginParam
+     * @return
+     */
+    private UserLoginDTO loginByUserPassword(UserPasswordLoginParam loginParam) {
+        UserDO userDO = null;
+        // 1. 根据登录名查询用户信息(登录名可以是手机号或邮箱)
+        if (RegexUtil.checkMail(loginParam.getLoginName())) {
+            // 邮箱登录
+            // 根据邮箱查询用户表
+            userDO = userMapper.selectBymail(loginParam.getLoginName());
+        } else if (RegexUtil.checkMobile(loginParam.getLoginName())) {
+            // 手机号登录
+            // 根据手机号查询用户表
+            userDO = userMapper.selectByPhoneNumber(new Encrypt(loginParam.getLoginName()));
+
+        } else {
+            throw new ServiceException(ServiceErrorCodeConstants.LOGIN_TYPE_NOT_EXIST);
+        }
+        // 2. 校验用户信息是否存在
+        if (null == userDO) {
+            throw new ServiceException(ServiceErrorCodeConstants.LOGIN_USERINFO_NOT_EXIST);
+        } else if (StringUtils.hasText(loginParam.getMandatoryIdentity())
+                && !loginParam.getMandatoryIdentity().equalsIgnoreCase(userDO.getIdentity()) ) {
+                // 强制身份登录，身份校验不通过
+            throw new ServiceException(ServiceErrorCodeConstants.LOGIN_IDENTITY_ERROR);
+        } else if (DigestUtil.sha256Hex(loginParam.getPassword()).equals(userDO.getPassword())) {
+            // 校验密码不通过
+            throw new ServiceException(ServiceErrorCodeConstants.LOGIN_PASSWORD_ERROR);
+        }
+        // 塞入返回值 JWT令牌
+        Map<String, Object> claims = new HashMap<>();
+        claims.put("id", userDO.getId());
+        claims.put("identity", userDO.getIdentity());
+        String token = JWTUtil.genJwt(claims);
+
+        UserLoginDTO userLoginDTO = new UserLoginDTO();
+        userLoginDTO.setToken(token);
+        userLoginDTO.setIdentity(UserIdentityEnum.forName(userDO.getIdentity()));
+        return userLoginDTO;
+    }
+
+    /**
+     * 短信验证码登录流程
+     * @param loginParam
+     * @return
+     */
+    private UserLoginDTO loginByShortMessage(ShortPasswordLogin loginParam) {
+        // TODO 短信验证码登录流程
+        return null;
     }
 }
