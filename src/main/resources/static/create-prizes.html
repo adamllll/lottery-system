@@ -6,12 +6,14 @@
     <link rel="stylesheet" href="https://cdn.bootcdn.net/ajax/libs/bootstrap/4.5.2/css/bootstrap.min.css">
     <link rel="stylesheet" href="./css/base.css"></link>
     <style>
+        /* 页面基础样式 */
         body {
             font-family: Arial, sans-serif;
             background-color: white;
             margin: 0;
             padding: 0;
         }
+        /* 表单容器 */
         .container {
             max-width: 800px;
             margin: 10px auto;
@@ -110,6 +112,7 @@
     </style>
 </head>
 <body>
+<!-- 创建奖品表单 -->
 <div class="container">
     <h2>开始创建奖品</h2>
     <div id="prizeRows">
@@ -146,8 +149,10 @@
 
 <script src="https://cdn.bootcdn.net/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
 <script>
+    // 登录态 token（请求头预留）
     var userToken = localStorage.getItem("user_token");
 
+    // 图片和表单参数通过 FormData 一并提交
     var formData = new FormData();
     // 提交奖品数据的函数
     function submitPrizes() {
@@ -189,6 +194,7 @@
             }
         });
     }
+
     // 上传图片：读取用户通过文件输入选择的图片文件，并将其显示在一个网页元素中
     function showImg(){
         var file =  document.getElementById("prizeImageUrl").files[0];

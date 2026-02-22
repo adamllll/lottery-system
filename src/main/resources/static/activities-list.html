@@ -6,13 +6,16 @@
   <link rel="stylesheet" href="https://cdn.bootcdn.net/ajax/libs/bootstrap/4.5.2/css/bootstrap.min.css">
   <link rel="stylesheet" href="./css/base.css">
   <style>
+    /* 页面基础视觉设置 */
     body {
       font-family: Arial, sans-serif;
       background-color: #f2f2f2;
     }
+    /* 活动列表页面主容器 */
     .activity-list {
       padding:0 30px;
     }
+    /* 列表滚动区域 */
     #activities{
       height: calc(100vh - 134px);
       overflow-y: auto;
@@ -98,11 +101,15 @@
   </style>
 </head>
 <body style="background-color: white">
+<!-- 活动列表页面主体 -->
 <div class="activity-list">
+  <!-- 页面标题 -->
   <h2>活动列表</h2>
+  <!-- 活动卡片容器（由 JS 动态渲染） -->
   <div id="activities">
     <!-- 活动列表将动态插入这里 -->
   </div>
+  <!-- 分页操作区 -->
   <div class="pagination">
     <button class="btn-outline-primary" onclick="fetchActivities(1)">首页</button>
     <button class="btn-outline-primary" onclick="previousPage()">上一页</button>
@@ -115,9 +122,11 @@
 <script src="https://cdn.bootcdn.net/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
 <script src="./js/toastr.min.js"></script>
 <script>
+    // 分页状态
     var currentPage = 1;
     var pageSize = 10;
     var totalPages;
+    // 登录态 token（请求头预留）
     var userToken = localStorage.getItem("user_token");
 
     // 发送AJAX请求的函数
@@ -190,7 +199,7 @@
       });
     }
 
-
+    // 上一页
     function previousPage() {
       if (currentPage > 1) {
         fetchActivities(currentPage - 1);
@@ -199,6 +208,7 @@
       }
     }
 
+    // 下一页
     function nextPage() {
       if (currentPage < totalPages) {
         fetchActivities(currentPage + 1);
@@ -207,6 +217,7 @@
       }
     }
 
+    // 页面初始化时加载第一页活动
     $(document).ready(function() {
       fetchActivities(1);
     });

@@ -7,12 +7,14 @@
     <link rel="stylesheet" href="./css/base.css">
     <link rel="stylesheet" href="./css/toastr.min.css">
     <style>
+        /* 页面基础布局 */
         body {
             font-family: Arial, sans-serif;
             background-color: #fff;
             margin: 0;
             padding: 0;
         }
+        /* 主表单容器 */
         .container {
             max-width: 800px;
             margin: 30px auto;
@@ -132,6 +134,7 @@
     </style>
 </head>
 <body>
+<!-- 创建活动主表单 -->
 <div class="container">
     <h2 class="h-title">创建抽奖活动</h2>
     <form id="activityForm">
@@ -152,6 +155,7 @@
 </div>
 <!-- toast提示 -->
 <div class="toast"></div>
+
 <!-- 奖品选择模态框 -->
 <div id="prizesModal" class="modal">
     <div class="modal-content">
@@ -171,12 +175,13 @@
         </div>
     </div>
 </div>
+
 <!-- 人员选择模态框 -->
 <div id="usersModal" class="modal">
     <div class="modal-content">
         <h2>人员列表<span class="close"  onclick="hideUsersModal()">&times;</span></h2>
         <div id="usersContainer">
-            <!-- 奖品列表将动态插入这里 -->
+            <!-- 人员列表将动态插入这里 -->
         </div>
         <div class="form-btn-box">
             <button type="button" class="btn btn-secondary pre-btn" onclick="hideUsersModal()">取消</button>
@@ -190,7 +195,10 @@
 <script  src="https://cdn.bootcdn.net/ajax/libs/jquery-validate/1.19.3/jquery.validate.min.js"></script>
 <script src="./js/toastr.min.js"></script>
 <script>
+    // 登录态 token（请求头预留）
     var userToken = localStorage.getItem("user_token");
+
+    // 奖品选择状态
     // 初始时奖品列表为空
     var selectedPrizes = [];
     // 显示奖品选择模态框
@@ -266,6 +274,7 @@
         }
     }
 
+    // 人员选择状态
     // 初始时人员列表为空
     var selectedUsers = [];
     // 显示人员选择模态框
@@ -334,6 +343,7 @@
         }
     }
 
+    // 创建活动：校验必填、奖品列表、人员列表并提交
     // 绑定表单提交事件
     $('#createActivity').click(function(event){
         event.stopPropagation()
@@ -402,6 +412,7 @@
             },
         });
     }
+
     // 获取奖品/人员列表并填充模态框
     $(document).ready(function() {
         fetchPrizes();

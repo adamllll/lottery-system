@@ -6,6 +6,7 @@
     <link rel="stylesheet" href="https://cdn.bootcdn.net/ajax/libs/bootstrap/4.5.2/css/bootstrap.min.css">
     <link rel="stylesheet" href="./css/base.css"></link>
     <style>
+    /* 页面基础样式 */
     body {
       font-family: Arial, sans-serif;
       padding: 0 30px;
@@ -115,8 +116,10 @@
   </style>
 </head>
 <body>
+<!-- 奖品列表页面主体 -->
 <div class=" prize-table">
     <h2>奖品列表</h2>
+    <!-- 奖品表格区 -->
     <div class="table-box">
       <table class="table">
         <thead>
@@ -135,6 +138,7 @@
         </tbody>
       </table>
     </div>
+    <!-- 分页操作区 -->
     <div class="pagination">
         <button class="btn-outline-primary" onclick="fetchPrizes(1)">首页</button>
         <button class="btn-outline-primary" onclick="previousPage()">上一页</button>
@@ -147,8 +151,10 @@
 
 <script src="https://cdn.bootcdn.net/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
 <script>
+    // 登录态 token（请求头预留）
     var userToken = localStorage.getItem("user_token");
 
+    // 分页状态
     var currentPage = 1;
     var pageSize = 10;
     var totalPages;
@@ -216,6 +222,7 @@
       });
     }
 
+    // 上一页
     function previousPage() {
       if (currentPage > 1) {
         fetchPrizes(currentPage - 1);
@@ -224,6 +231,7 @@
       }
     }
 
+    // 下一页
     function nextPage() {
       if (currentPage < totalPages) {
         fetchPrizes(currentPage + 1);
@@ -232,6 +240,7 @@
       }
     }
 
+    // 页面初始化：默认加载第一页
     $(document).ready(function() {
       fetchPrizes(1);
     });

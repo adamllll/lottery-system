@@ -4,6 +4,7 @@
     <meta charset="utf-8">
     <title>抽奖页面</title>
     <style type="text/css">
+        /* 全局重置 */
         * {
             margin: 0;
             padding: 0;
@@ -82,6 +83,7 @@
 </head>
 
 <body>
+<!-- 抽奖主视图：标题 + 奖项信息 + 展示区 + 操作按钮 -->
 <div id="container">
     <div id="title"></div>
     <div id="disc"></div>
@@ -95,6 +97,7 @@
 <script src="https://cdn.bootcdn.net/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
 <script>
 
+    // 页面参数：活动ID、活动是否进行中
     var params = new URLSearchParams(window.location.search);
     var activityId = params.get('activityId');
     var valid = params.get('valid');
@@ -114,6 +117,7 @@
     var names = null
     // 正在做什么
     var state = ''
+    // 状态流转：showPic -> showBlink -> showList
 
     // 等待DOM加载完成
     document.addEventListener('DOMContentLoaded', function() {
@@ -403,6 +407,7 @@
         });
     }
 
+    // 主流程控制器：根据当前状态切换抽奖阶段
     // nextStep函数用于根据当前状态显示下一个步骤的内容。
     // 它根据state的值和data.list的长度来决定是显示图片、闪烁文字还是静态文字列表，并更新step和state。
     function nextStep() {
@@ -453,6 +458,7 @@
         }
     }
 
+    // 返回上一奖项展示（仅影响前端浏览步骤）
     // previousStep函数用于返回到上一个步骤。如果当前步骤不是第一个步骤，则减少step的值，然后调用nextStep函数。
     function previousStep() {
         if (step > 0) {

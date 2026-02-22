@@ -14,6 +14,8 @@ import org.adam.lotterysystem.dao.dataobject.Encrypt;
 import org.adam.lotterysystem.dao.dataobject.UserDO;
 import org.adam.lotterysystem.dao.mapper.UserMapper;
 import org.adam.lotterysystem.service.UserService;
+import org.adam.lotterysystem.service.VerificationCodeService;
+import org.adam.lotterysystem.service.dto.UserDTO;
 import org.adam.lotterysystem.service.dto.UserLoginDTO;
 import org.adam.lotterysystem.service.dto.UserRegisterDTO;
 import org.adam.lotterysystem.service.enums.UserIdentityEnum;
@@ -22,13 +24,19 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 public class UserServiceImpl implements UserService {
 
     @Autowired
     private UserMapper userMapper;
+
+    @Autowired
+    private VerificationCodeService verificationCodeService;
+
     @Override
     public UserRegisterDTO registerDTO(UserRegisterParam param) {
         // 校验注册信息
@@ -127,6 +135,29 @@ public class UserServiceImpl implements UserService {
     }
 
     /**
+     * 查询用户信息列表
+     * @param forName: 如果为空，则查询所有用户信息；如果不为空，则查询对应身份的用户信息
+     * @return
+     */
+    @Override
+    public List<UserDTO> findUserInfo(UserIdentityEnum identity) {
+        String identityString = null == identity ? null : identity.name();
+        // 查询用户表，获取用户数据列表
+        List<UserDO> userDOList = userMapper.selectUserListByIdentity(identityString);
+        // 构造返回结果
+        List<UserDTO> userDTOList = userDOList.stream().map(userDO -> {
+            UserDTO userDTO = new UserDTO();
+            userDTO.setUserId(userDO.getId());
+            userDTO.setUserName(userDO.getUserName());
+            userDTO.setEmail(userDO.getEmail());
+            userDTO.setPhoneNumber(userDO.getPhoneNumber().getValue());
+            userDTO.setIdentity(UserIdentityEnum.forName(userDO.getIdentity()));
+            return userDTO;
+        }).collect(Collectors.toList());
+        return userDTOList;
+    }
+
+    /**
      * 密码登录流程
      * @param loginParam
      * @return
@@ -153,7 +184,7 @@ public class UserServiceImpl implements UserService {
                 && !loginParam.getMandatoryIdentity().equalsIgnoreCase(userDO.getIdentity()) ) {
                 // 强制身份登录，身份校验不通过
             throw new ServiceException(ServiceErrorCodeConstants.LOGIN_IDENTITY_ERROR);
-        } else if (DigestUtil.sha256Hex(loginParam.getPassword()).equals(userDO.getPassword())) {
+        } else if (!DigestUtil.sha256Hex(loginParam.getPassword()).equals(userDO.getPassword())) {
             // 校验密码不通过
             throw new ServiceException(ServiceErrorCodeConstants.LOGIN_PASSWORD_ERROR);
         }
@@ -175,7 +206,35 @@ public class UserServiceImpl implements UserService {
      * @return
      */
     private UserLoginDTO loginByShortMessage(ShortPasswordLogin loginParam) {
-        // TODO 短信验证码登录流程
-        return null;
+        if (!RegexUtil.checkMobile(loginParam.getLoginMobile())) {
+            throw new ServiceException(ServiceErrorCodeConstants.PHONE_FORMAT_ERROR);
+        }
+
+        // 获取用户数据
+        UserDO userDO = userMapper.selectByPhoneNumber(new Encrypt(loginParam.getLoginMobile()));
+        if (null == userDO) {
+            throw new ServiceException(ServiceErrorCodeConstants.LOGIN_USERINFO_NOT_EXIST);
+        } else if (StringUtils.hasText(loginParam.getMandatoryIdentity()) &&
+                !loginParam.getMandatoryIdentity().equalsIgnoreCase(userDO.getIdentity())) {
+            throw new ServiceException(ServiceErrorCodeConstants.LOGIN_IDENTITY_ERROR);
+        }
+
+        // 校验验证码（阿里云号码认证服务端核验）
+        boolean verified = verificationCodeService.checkVerificationCode(
+                loginParam.getLoginMobile(), loginParam.getVerificationCode());
+        if (!verified) {
+            throw new ServiceException(ServiceErrorCodeConstants.LOGIN_VERIFICATION_CODE_ERROR);
+        }
+
+        // 塞入返回值 JWT令牌
+        Map<String, Object> claims = new HashMap<>();
+        claims.put("id", userDO.getId());
+        claims.put("identity", userDO.getIdentity());
+        String token = JWTUtil.genJwt(claims);
+
+        UserLoginDTO userLoginDTO = new UserLoginDTO();
+        userLoginDTO.setToken(token);
+        userLoginDTO.setIdentity(UserIdentityEnum.forName(userDO.getIdentity()));
+        return userLoginDTO;
     }
 }

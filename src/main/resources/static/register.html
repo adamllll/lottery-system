@@ -3,15 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <title>注册页面</title>
-    <link rel="stylesheet"
-          href="https://cdn.staticfile.org/twitter-bootstrap/4.5.2/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.staticfile.org/twitter-bootstrap/4.5.2/css/bootstrap.min.css">
     <link rel="stylesheet" href="./css/base.css">
-    <script
-            src="https://cdn.bootcdn.net/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
-    <script
-            src="https://cdn.bootcdn.net/ajax/libs/jquery-validate/1.19.3/jquery.validate.min.js"></script>
-    <link rel="stylesheet"
-          href="https://cdn.staticfile.org/twitter-bootstrap/4.5.2/js/bootstrap.min.js">
+    <script src="https://cdn.bootcdn.net/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    <script src="https://cdn.bootcdn.net/ajax/libs/jquery-validate/1.19.3/jquery.validate.min.js"></script>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -19,6 +14,7 @@
             margin: 0;
             padding: 0;
         }
+
         .register-container {
             max-width: 600px;
             margin: 50px auto;
@@ -26,21 +22,20 @@
             background-color: #fff;
             border-radius: 5px;
         }
-        .register-container h2{
+
+        .register-container h2 {
             font-weight: 600;
             font-size: 32px;
             letter-spacing: 1px;
-            color: #000000;
+            color: #000;
             line-height: 50px;
             text-align: center;
             margin-bottom: 60px;
         }
-        .show-password {
-            float: right;
-            cursor: pointer;
-            color: #008CBA;
-        }
 
+        .input-group .btn {
+            min-width: 120px;
+        }
     </style>
 </head>
 <body>
@@ -49,42 +44,97 @@
     <form id="registerForm">
         <div class="form-group">
             <label for="name">姓名</label>
-            <input type="text" class="form-control" id="name"
-                   name="name" placeholder="请输入姓名" required>
+            <input type="text" class="form-control" id="name" name="name" placeholder="请输入姓名" required>
         </div>
         <div class="form-group">
             <label for="mail">邮箱</label>
-            <input type="email" class="form-control" id="mail"
-                   name="mail" placeholder="请输入邮箱" required>
+            <input type="email" class="form-control" id="mail" name="mail" placeholder="请输入邮箱" required>
         </div>
         <div class="form-group">
             <label for="phoneNumber">手机号</label>
-            <input type="text" class="form-control" id="phoneNumber"
-                   name="phoneNumber" placeholder="请输入手机号" required>
+            <input type="text" class="form-control" id="phoneNumber" name="phoneNumber" placeholder="请输入手机号" required>
+        </div>
+        <div class="form-group">
+            <label for="verificationCode">验证码</label>
+            <div class="input-group">
+                <input type="text" class="form-control" id="verificationCode" name="verificationCode" placeholder="请输入验证码">
+                <div class="input-group-append">
+                    <button type="button" class="btn btn-outline-secondary" id="getVerificationCode">获取验证码</button>
+                </div>
+            </div>
         </div>
         <div class="form-group">
             <label for="password">密码</label>
-            <input type="password" class="form-control" id="password"
-                   name="password" placeholder="请输入密码" required>
+            <input type="password" class="form-control" id="password" name="password" placeholder="请输入密码">
         </div>
-        <button type="submit"
-                class="btn btn-primary btn-block">注册</button>
+        <button type="submit" class="btn btn-primary btn-block">注册</button>
     </form>
 </div>
 
 <script>
-    // 获取链接参数
     var params = new URLSearchParams(window.location.search);
-    var admin = params.get('admin');
+    var jumpList = params.get("jumpList");
+    var admin = params.get("admin");
+    var isAdminAddUser = admin === "false";
+    var userToken = localStorage.getItem("user_token");
+    var timer = null;
 
-    // 判断是否隐藏密码输入框
-    if(admin === 'false') {
-        // 隐藏密码输入框
-        $('#password').closest('div.form-group').css('display', 'none');
+    if (isAdminAddUser) {
+        $("#password").closest("div.form-group").hide();
+        $("#verificationCode").closest("div.form-group").hide();
     }
 
-    // 使用jQuery Validate插件来验证表单
+    $("#getVerificationCode").on("click", function () {
+        if (isAdminAddUser) {
+            return;
+        }
+
+        var phoneNumber = $("#phoneNumber").val();
+        if (!phoneNumber) {
+            alert("请先输入手机号");
+            return;
+        }
+
+        var $btn = $(this);
+        if ($btn.prop("disabled")) {
+            return;
+        }
+
+        var num = 60;
+        $btn.prop("disabled", true).text(num + "s");
+
+        $.ajax({
+            url: "/verification-code/send",
+            type: "GET",
+            data: {phoneNumber: phoneNumber},
+            success: function (result) {
+                if (result.code !== 200) {
+                    clearInterval(timer);
+                    $btn.prop("disabled", false).text("重新获取");
+                    alert("验证码发送失败: " + result.msg);
+                }
+            },
+            error: function () {
+                clearInterval(timer);
+                $btn.prop("disabled", false).text("重新获取");
+                alert("验证码发送失败");
+            }
+        });
+
+        timer && clearInterval(timer);
+        timer = setInterval(function () {
+            if (num > 1) {
+                num--;
+                $btn.text(num + "s");
+            } else {
+                clearInterval(timer);
+                $btn.prop("disabled", false).text("重新获取");
+            }
+        }, 1000);
+    });
+
     $("#registerForm").validate({
+        ignore: ":hidden",
         rules: {
             name: "required",
             mail: {
@@ -92,6 +142,7 @@
                 email: true
             },
             phoneNumber: "required",
+            verificationCode: "required",
             password: {
                 required: true,
                 minlength: 6
@@ -101,36 +152,72 @@
             name: "请输入您的姓名",
             mail: "请输入有效的邮箱地址",
             phoneNumber: "请输入您的手机号",
+            verificationCode: "请输入验证码",
             password: {
                 required: "请输入密码",
-                minlength: "密码长度至少为6个字符"
+                minlength: "密码长度至少6位"
             }
         },
-        submitHandler: function(form) {
-            var formData = {
-                name: $('#name').val(),
-                mail: $('#mail').val(),
-                phoneNumber: $('#phoneNumber').val(),
-                password: $('#password').val(),
-                identity: (admin == null || admin === 'true') ? "ADMIN" : "NORMAL"
-            };
+        submitHandler: function () {
+            if (isAdminAddUser && !userToken) {
+                alert("登录状态已失效，请重新登录");
+                window.parent.location.href = "/blogin.html";
+                return false;
+            }
 
-            // 表单验证通过后，发送AJAX请求
+            var requestUrl = "/register";
+            var headers = {};
+            var formData;
+
+            if (isAdminAddUser) {
+                requestUrl = "/admin/user/add";
+                headers.user_token = userToken;
+                formData = {
+                    name: $("#name").val(),
+                    mail: $("#mail").val(),
+                    phoneNumber: $("#phoneNumber").val()
+                };
+            } else {
+                formData = {
+                    name: $("#name").val(),
+                    mail: $("#mail").val(),
+                    phoneNumber: $("#phoneNumber").val(),
+                    verificationCode: $("#verificationCode").val(),
+                    password: $("#password").val(),
+                    identity: (admin == null || admin === "true") ? "ADMIN" : "NORMAL"
+                };
+            }
+
             $.ajax({
-                url: '/register',
-                type: 'POST',
-                contentType: 'application/json',
+                url: requestUrl,
+                type: "POST",
+                contentType: "application/json",
+                headers: headers,
                 data: JSON.stringify(formData),
-                success: function(result) {
-                    if (result.code != 200) {
-                        alert("注册失败！" + result.msg);
+                success: function (result) {
+                    if (result.code !== 200) {
+                        alert("注册失败: " + result.msg);
+                    } else if (jumpList === "true") {
+                        window.parent.postMessage(
+                            {
+                                from: "user-list.html",
+                                id: "#userList"
+                            },
+                            "*"
+                        );
                     } else {
                         alert("注册成功！");
                         location.assign("blogin.html");
                     }
+                },
+                error: function (err) {
+                    if (err != null && err.status === 401) {
+                        alert("用户未登录，即将跳转到登录页!");
+                        window.parent.location.href = "/blogin.html";
+                    }
                 }
             });
-            return false; // 阻止表单的默认提交行为
+            return false;
         }
     });
 </script>

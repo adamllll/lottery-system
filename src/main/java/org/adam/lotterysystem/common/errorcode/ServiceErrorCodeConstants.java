@@ -15,6 +15,7 @@ public interface ServiceErrorCodeConstants {
     ErrorCode LOGIN_USERINFO_NOT_EXIST = new ErrorCode(110, "登录用户信息不存在");
     ErrorCode LOGIN_IDENTITY_ERROR = new ErrorCode(111, "登录身份信息错误");
     ErrorCode LOGIN_PASSWORD_ERROR = new ErrorCode(112, "登录密码错误");
+    ErrorCode LOGIN_VERIFICATION_CODE_ERROR = new ErrorCode(113, "登录验证码错误或已过期");
 
     // 通用校验错误码
     ErrorCode PHONE_FORMAT_ERROR = new ErrorCode(108, "手机号格式错误");
