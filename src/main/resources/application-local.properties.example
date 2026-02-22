@@ -1,0 +1,4 @@
+# Copy this file to application-local.properties for local secrets.
+
+sms.access-key-id=your_access_key_id
+sms.access-key-secret=your_access_key_secret

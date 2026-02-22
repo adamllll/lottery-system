@@ -40,3 +40,6 @@ docs/
 .env
 .env.*
 !.env.example
+
+### Local secret config ###
+src/main/resources/application-local.properties
