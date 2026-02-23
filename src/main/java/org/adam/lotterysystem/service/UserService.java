@@ -26,7 +26,7 @@ public interface UserService {
 
     /**
      * 根据身份信息查询用户信息
-     * @param forName: 如果为空，则查询所有用户信息；如果不为空，则查询对应身份的用户信息
+     * @param identity: 如果为空，则查询所有用户信息；如果不为空，则查询对应身份的用户信息
      * @return
      */
     List<UserDTO> findUserInfo(UserIdentityEnum identity);

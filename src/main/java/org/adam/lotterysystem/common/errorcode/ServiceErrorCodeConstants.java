@@ -25,4 +25,7 @@ public interface ServiceErrorCodeConstants {
     // 奖品模块错误码
 
     // 抽奖错误码
+
+    // 图片错误码
+     ErrorCode PICTURE_SAVE_ERROR = new ErrorCode(500, "图片保存失败");
 }
