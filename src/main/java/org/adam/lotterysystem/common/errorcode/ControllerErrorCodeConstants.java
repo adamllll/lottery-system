@@ -6,9 +6,10 @@ public interface ControllerErrorCodeConstants {
     ErrorCode VERIFICATION_CODE_ERROR = new ErrorCode(101, "验证码错误或已过期");
     ErrorCode LOGIN_ERROR = new ErrorCode(102, "登录失败，用户名或密码错误");
 
-    // 活动模块错误码
-
     // 奖品模块错误码
+    ErrorCode PRIZE_NOT_FOUND = new ErrorCode(200, "奖品不存在");
+
+    // 活动模块错误码
 
     // 抽奖错误码
 }

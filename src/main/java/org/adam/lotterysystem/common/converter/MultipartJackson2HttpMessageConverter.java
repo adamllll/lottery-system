@@ -1,32 +1,25 @@
 package org.adam.lotterysystem.common.converter;
 
+import org.springframework.core.ResolvableType;
 import org.springframework.http.MediaType;
-import org.springframework.http.converter.json.AbstractJackson2HttpMessageConverter;
+import org.springframework.http.converter.AbstractJacksonHttpMessageConverter;
 import org.springframework.stereotype.Component;
-import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 
-import java.lang.reflect.Type;
-
+/**
+ * 处理 multipart 请求中 JSON 部分的反序列化。
+ * 仅支持读取（反序列化），禁止写入（序列化），避免干扰正常的 JSON 响应输出。
+ */
 @Component
-public class MultipartJackson2HttpMessageConverter extends AbstractJackson2HttpMessageConverter {
+public class MultipartJackson2HttpMessageConverter extends AbstractJacksonHttpMessageConverter<JsonMapper> {
 
-    protected MultipartJackson2HttpMessageConverter(ObjectMapper objectMapper) {
+    protected MultipartJackson2HttpMessageConverter(JsonMapper jsonMapper) {
         // MediaType.APPLICATION_OCTET_STREAM 表示这个转换器用于处理二进制流数据，通常用于文件上传。
-        super(objectMapper, MediaType.APPLICATION_OCTET_STREAM);
+        super(jsonMapper, MediaType.APPLICATION_OCTET_STREAM);
     }
 
     @Override
-    public boolean canWrite(Class<?> clazz, MediaType mediaType) {
-        return false;
-    }
-
-    @Override
-    public boolean canWrite(Type type, Class<?> clazz, MediaType mediaType) {
-        return false;
-    }
-
-    @Override
-    protected boolean canWrite(MediaType mediaType) {
+    public boolean canWrite(ResolvableType type, Class<?> clazz, MediaType mediaType) {
         return false;
     }
 }

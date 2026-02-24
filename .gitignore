@@ -43,3 +43,6 @@ docs/
 
 ### Local secret config ###
 src/main/resources/application-local.properties
+
+### Upload files ###
+pics/

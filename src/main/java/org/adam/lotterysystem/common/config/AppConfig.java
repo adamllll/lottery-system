@@ -19,6 +19,7 @@ public class AppConfig implements WebMvcConfigurer {
             "/css/**",
             "/js/**",
             "/images/**",
+            "/pic/**",
             "/pics/**",
             "/*.jpg",
             "/*.png",
@@ -27,7 +28,8 @@ public class AppConfig implements WebMvcConfigurer {
             "/register",
             "/verification-code/send",
             "/winning-records/show",
-            "/prize/**"
+            "/prize/create",
+            "/prize/find-list"
     );
     @Override
     public void addInterceptors(InterceptorRegistry registry) {

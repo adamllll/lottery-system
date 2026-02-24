@@ -152,28 +152,32 @@
     // 登录态 token（请求头预留）
     var userToken = localStorage.getItem("user_token");
 
-    // 图片和表单参数通过 FormData 一并提交
-    var formData = new FormData();
     // 提交奖品数据的函数
     function submitPrizes() {
+        var file = document.getElementById("prizeImageUrl").files[0];
+        if (!file) {
+            alert('请选择奖品图片！');
+            return;
+        }
         var prizeName = $('#prizeName').val();
         var description = $('#description').val();
         var price = $('#price').val();
+        // 每次提交重新创建 FormData，避免重复 append 导致请求体膨胀
+        var formData = new FormData();
+        formData.append("prizePic", file);
         formData.append("param", JSON.stringify({
             prizeName:prizeName,
-            description:description,
-            price:price,
+            prizeDescription:description,
+            prizePrice:price,
         }));
         // 发送POST请求到后端接口
         $.ajax({
-            url: '',
-            type: '',
-            // 不设置Content-Type请求头，因为数据将通过其他方式传递，例如通过FormData。
+            url: '/prize/create',
+            type: 'POST',
             contentType : false,
-            // 不要处理发送的数据
             processData : false,
             headers: {
-                // jwt
+                "user_token": userToken
             },
             data: formData,
             success: function(result) {
@@ -187,22 +191,19 @@
                 console.log(err);
                 if(err!=null && err.status==401){
                     alert("用户未登录, 即将跳转到登录页!");
-                    // 跳转登录页
                     window.location.href = "/blogin.html";
-                    window.parent.location.href = "/blogin.html";//让父页面一起跳转
+                    window.parent.location.href = "/blogin.html";
                 }
             }
         });
     }
 
-    // 上传图片：读取用户通过文件输入选择的图片文件，并将其显示在一个网页元素中
+    // 上传图片预览
     function showImg(){
-        var file =  document.getElementById("prizeImageUrl").files[0];
-        formData.append("prizePic",file);
-        var r= new FileReader();
-        result = r.readAsDataURL(file);
-        r.onload=function (e) {
-            console.log(e)
+        var file = document.getElementById("prizeImageUrl").files[0];
+        var r = new FileReader();
+        r.readAsDataURL(file);
+        r.onload = function (e) {
             $('#previewImg').attr("src", e.target.result).show();
         }
     }
