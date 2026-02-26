@@ -32,7 +32,7 @@ public class PrizeController {
     @Autowired
     private PictureService pictureService;
 
-    @PostMapping("/pics/upload")
+    @PostMapping("/pic/upload")
     public String uploadPicture(@RequestParam("file") MultipartFile file) {
         return pictureService.savePicture(file);
     }

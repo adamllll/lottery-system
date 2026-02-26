@@ -10,6 +10,7 @@ public interface ControllerErrorCodeConstants {
     ErrorCode PRIZE_NOT_FOUND = new ErrorCode(200, "奖品不存在");
 
     // 活动模块错误码
+    ErrorCode CREATE_ACTIVITY_ERROR = new ErrorCode(300, "创建活动失败");
 
     // 抽奖错误码
 }

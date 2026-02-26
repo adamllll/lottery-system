@@ -45,4 +45,4 @@ docs/
 src/main/resources/application-local.properties
 
 ### Upload files ###
-pics/
+pic/
