@@ -21,13 +21,15 @@ public interface ServiceErrorCodeConstants {
     ErrorCode PHONE_FORMAT_ERROR = new ErrorCode(108, "手机号格式错误");
 
     // 奖品模块错误码
-    ErrorCode CREATE_ACTIVITY_INFO_IS_EMPTY = new ErrorCode(200, "创建活动信息为空");
-    ErrorCode CREATE_ACTIVITY_USER_ERROR = new ErrorCode(201, "创建活动关联的人员信息错误");
-    ErrorCode CREATE_ACTIVITY_PRIZE_ERROR = new ErrorCode(202, "创建活动关联的奖品信息错误");
-    ErrorCode CREATE_PRIZE_USER_ERROR = new ErrorCode(203, "创建活动关联的奖品及人员信息错误");
+
+
 
     // 活动模块错误码
-
+    ErrorCode CREATE_ACTIVITY_INFO_IS_EMPTY = new ErrorCode(300, "创建活动信息为空");
+    ErrorCode CREATE_ACTIVITY_USER_ERROR = new ErrorCode(301, "创建活动关联的人员信息错误");
+    ErrorCode CREATE_ACTIVITY_PRIZE_ERROR = new ErrorCode(302, "创建活动关联的奖品信息错误");
+    ErrorCode CREATE_PRIZE_USER_ERROR = new ErrorCode(303, "创建活动关联的奖品及人员信息错误");
+    ErrorCode CREATE_ACTIVITY_PRIZE_TIERS_ERROR = new ErrorCode(304, "创建活动关联的奖品等级信息错误");
     // 抽奖错误码
 
     // 图片错误码
