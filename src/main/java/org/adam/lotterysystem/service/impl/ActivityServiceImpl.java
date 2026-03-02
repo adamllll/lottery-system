@@ -2,28 +2,43 @@ package org.adam.lotterysystem.service.impl;
 
 import org.adam.lotterysystem.common.errorcode.ServiceErrorCodeConstants;
 import org.adam.lotterysystem.common.exception.ServiceException;
+import org.adam.lotterysystem.common.utils.JacksonUtil;
+import org.adam.lotterysystem.common.utils.RedisUtil;
 import org.adam.lotterysystem.controller.param.CreateActivityParam;
 import org.adam.lotterysystem.controller.param.CreatePrizeByActivityParam;
 import org.adam.lotterysystem.controller.param.CreateUserByActivityParam;
 import org.adam.lotterysystem.dao.dataobject.ActivityDO;
 import org.adam.lotterysystem.dao.dataobject.ActivityPrizeDO;
 import org.adam.lotterysystem.dao.dataobject.ActivityUserDO;
+import org.adam.lotterysystem.dao.dataobject.PrizeDO;
 import org.adam.lotterysystem.dao.mapper.*;
 import org.adam.lotterysystem.service.ActivityService;
+import org.adam.lotterysystem.service.dto.ActivityDetailDTO;
 import org.adam.lotterysystem.service.dto.CreateActivityDTO;
 import org.adam.lotterysystem.service.enums.ActivityPrizeStatusEnum;
 import org.adam.lotterysystem.service.enums.ActivityPrizeTiersEnum;
 import org.adam.lotterysystem.service.enums.ActivityStatusEnum;
 import org.adam.lotterysystem.service.enums.ActivityUSerStatusEnum;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
 public class ActivityServiceImpl implements ActivityService {
+
+    private static final Logger logger = LoggerFactory.getLogger(ActivityServiceImpl.class);
+
+    // 活动信息在 Redis 中的 key 前缀，实际 key 还需要拼接活动 id，例如：ACTIVITY_10001
+    private final String ACTIVITY_PREFIX = "ACTIVITY_";
+    // 活动信息缓存在 Redis 中的 key 的过期时间，单位：秒（这里设置为三天）
+    private final Long ACTIVITY_TIMEOUT = 60 * 60 * 24 * 3L;
 
     @Autowired
     private UserMapper userMapper;
@@ -39,6 +54,9 @@ public class ActivityServiceImpl implements ActivityService {
 
     @Autowired
     private ActivityPrizeMapper activityPrizeMapper;
+
+    @Autowired
+    private RedisUtil redisUtil;
 
     @Override
     @Transactional(rollbackFor = Exception.class) // 涉及多表
@@ -75,9 +93,101 @@ public class ActivityServiceImpl implements ActivityService {
         }).collect(Collectors.toList());
         activityUserMapper.batchInsert(activityUserDOList);
         // 整合完整的活动信息，存放Redis
+        // activityId : ActivityDetailInfoTOD:活动信息+奖品信息+人员信息
 
+        // 先获取奖品基本属性列表
+        // 获取需要查询的奖品id 列表
+        List<Long> prizeIds = param.getActivityPrizeList().stream()
+                .map(CreatePrizeByActivityParam::getPrizeId)
+                .distinct() // 去重
+                .collect(Collectors.toList());
+        List<PrizeDO> prizeDOList = prizeMapper.batchSelectByIds(prizeIds);
+        ActivityDetailDTO detailDTO =  convertToActivityDetailDTO(activityDO, activityPrizeDOList, activityUserDOList, prizeDOList);
+
+        cacheActivity(detailDTO);
         // 返回创建活动的结果
-        return null;
+        CreateActivityDTO createActivityDTO = new CreateActivityDTO();
+        createActivityDTO.setActivityId(activityDO.getId());
+        return createActivityDTO;
+    }
+
+    // 缓存完整的活动信息到 Redis
+    private void cacheActivity(ActivityDetailDTO detailDTO) {
+        // key: activityId(实际上：ACTIVITY_**)
+        // value: ActivityDetailDTO(实际上：json字符串)
+        if (null == detailDTO || null == detailDTO.getActivityId()) {
+            logger.warn("缓存活动信息不存在");
+            return;
+        }
+        try {
+            redisUtil.set(ACTIVITY_PREFIX + detailDTO.getActivityId(), JacksonUtil.writeValueAsString(detailDTO), ACTIVITY_TIMEOUT);
+        }catch (Exception e) {
+            logger.error("缓存活动信息失败, ActivityDetailDTO={}", JacksonUtil.writeValueAsString(detailDTO), e);
+        }
+    }
+
+    // 根据活动 Id 从缓存中获取完整的活动信息
+    private ActivityDetailDTO getActivityFromCache(Long activityId) {
+        if (null == activityId) {
+            logger.warn("活动 id 不存在");
+            return null;
+        }
+        try {
+            String str = redisUtil.get(ACTIVITY_PREFIX + activityId);
+            if (StringUtils.hasText(str)) {
+                logger.info("获取缓存数据为空, key={}", ACTIVITY_PREFIX + activityId);
+                return null;
+            }
+            return JacksonUtil.readValue(str, ActivityDetailDTO.class);
+        }catch (Exception e) {
+            logger.error("从缓存中获取活动信息失败, key={}", ACTIVITY_PREFIX + activityId, e);
+            return null;
+        }
+
+    }
+
+    private ActivityDetailDTO convertToActivityDetailDTO(ActivityDO activityDO, List<ActivityPrizeDO> activityPrizeDOList, List<ActivityUserDO> activityUserDOList, List<PrizeDO> prizeDOList) {
+        ActivityDetailDTO detailDTO = new ActivityDetailDTO();
+        detailDTO.setActivityId(activityDO.getId());
+        detailDTO.setActivityName(activityDO.getActivityName());
+        detailDTO.setDescription(activityDO.getDescription());
+        detailDTO.setStatus(ActivityStatusEnum.forName(activityDO.getStatus()));
+
+        // 奖品信息列表
+        // activityPrizeDO:id name imageUrl price description tiers prizeAmount status
+        // prizeDO:{id,name...},{id,name...}
+        List<ActivityDetailDTO.PrizeDTO> prizeDTOList = activityPrizeDOList
+                .stream()
+                .map(activityPrizeDO -> {
+                    ActivityDetailDTO.PrizeDTO prizeDTO = new ActivityDetailDTO.PrizeDTO();
+                    prizeDTO.setId(activityPrizeDO.getPrizeId());
+                    Optional<PrizeDO> optionalPrizeDO = prizeDOList.stream()
+                            .filter(item -> item.getId().equals(activityPrizeDO.getPrizeId()))
+                            .findFirst();
+                    // 如果PrizeDO为空，不执行当前方法
+                    optionalPrizeDO.ifPresent(prizeDO -> {
+                        prizeDTO.setName(prizeDO.getName());
+                        prizeDTO.setImageUrl(prizeDO.getImageUrl());
+                        prizeDTO.setPrice(prizeDO.getPrice());
+                        prizeDTO.setDescription(prizeDO.getDescription());
+                    });
+                    prizeDTO.setTiers(ActivityPrizeTiersEnum.forName(activityPrizeDO.getPrizeTiers()));
+                    prizeDTO.setPrizeAmount(activityPrizeDO.getPrizeAmount());
+                    prizeDTO.setStatus(ActivityPrizeStatusEnum.forName(activityPrizeDO.getStatus()));
+                    return prizeDTO;
+                }).collect(Collectors.toList());
+        detailDTO.setPrizeDTOList(prizeDTOList);
+
+        // 人员信息列表
+        List<ActivityDetailDTO.UserDTO> userDTOList = activityUserDOList.stream()
+                .map(activityUserDO -> {
+                    ActivityDetailDTO.UserDTO userDTO = new ActivityDetailDTO.UserDTO();
+                    userDTO.setUserId(activityUserDO.getUserId());
+                    userDTO.setUserName(activityUserDO.getUserName());
+                    return userDTO;
+                }).collect(Collectors.toList());
+        detailDTO.setUserDTOList(userDTOList);
+        return detailDTO;
     }
 
     /**
