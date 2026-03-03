@@ -30,6 +30,7 @@ public interface ServiceErrorCodeConstants {
     ErrorCode CREATE_ACTIVITY_PRIZE_ERROR = new ErrorCode(302, "创建活动关联的奖品信息错误");
     ErrorCode CREATE_PRIZE_USER_ERROR = new ErrorCode(303, "创建活动关联的奖品及人员信息错误");
     ErrorCode CREATE_ACTIVITY_PRIZE_TIERS_ERROR = new ErrorCode(304, "创建活动关联的奖品等级信息错误");
+    ErrorCode CREATE_ACTIVITY_USER_AMOUNT_LT_PRIZE_AMOUNT_ERROR = new ErrorCode(305, "活动关联人员数量不能小于奖品总数量");
     // 抽奖错误码
 
     // 图片错误码

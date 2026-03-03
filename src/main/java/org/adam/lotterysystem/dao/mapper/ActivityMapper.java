@@ -1,9 +1,10 @@
 package org.adam.lotterysystem.dao.mapper;
 
+import org.adam.lotterysystem.controller.param.PageParam;
 import org.adam.lotterysystem.dao.dataobject.ActivityDO;
-import org.apache.ibatis.annotations.Insert;
-import org.apache.ibatis.annotations.Mapper;
-import org.apache.ibatis.annotations.Options;
+import org.apache.ibatis.annotations.*;
+
+import java.util.List;
 
 @Mapper
 public interface ActivityMapper {
@@ -12,4 +13,11 @@ public interface ActivityMapper {
             "values(#{activityName}, #{description}, #{status})")
     @Options(useGeneratedKeys = true, keyProperty = "id", keyColumn = "id")
     int insert(ActivityDO activityDO);
+
+    @Select("select count(1) from activity")
+    int count(PageParam param);
+
+    @Select("select * from activity order by id desc limit #{offset}, #{pageSize}")
+    List<ActivityDO> selectActivityList(
+            @Param("offset") Integer offset, @Param("pageSize") Integer pageSize);
 }

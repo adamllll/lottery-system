@@ -199,7 +199,7 @@
     var userToken = localStorage.getItem("user_token");
 
     // 奖品选择状态
-    // 初始时奖品列表为空
+    // 初始时奖品列表为空:勾选的奖品存放在selectedPrizes中，每个奖品包含prizeId、prizeAmount、prizeTiers字段
     var selectedPrizes = [];
     // 显示奖品选择模态框
     function showPrizesModal() {
@@ -212,12 +212,13 @@
     // 获取奖品列表的函数
     function fetchPrizes() {
         $.ajax({
-            url: '',
-            type: '',
+            url: '/prize/find-list',
+            type: 'GET',
             dataType: 'json',
-            data: { currentPage: 1, pageSize: 100},
+            data: { currentPage: 1, pageSize: 100}, // 分页参数，假设一次获取100个奖品(可优化点)
             headers: {
                 // jwt
+                "user_token": userToken
             },
             success: function(result) {
                 var prizes = result.data.records;
@@ -275,7 +276,7 @@
     }
 
     // 人员选择状态
-    // 初始时人员列表为空
+    // 初始时人员列表为空: 存放勾选的人员信息，每个奖品包含userId、userName字段
     var selectedUsers = [];
     // 显示人员选择模态框
     function showUsersModal() {
@@ -288,12 +289,13 @@
     // 获取人员列表的函数
     function fetchUsers() {
         $.ajax({
-            url: '',
-            type: '',
+            url: '/base-user/find-list',
+            type: 'GET',
             dataType: 'json',
-            data: { identity: '' },
+            data: { identity: 'NORMAL' },
             headers: {
                 // jwt
+                "user_token": userToken
             },
             success: function(result) {
                 var users = result.data;
@@ -390,12 +392,13 @@
     // 提交活动信息接口
     function submitActivity(data){
         $.ajax({
-            url: '',
-            type: '',
+            url: '/activity/create',
+            type: 'POST',
             contentType: 'application/json',
             data: JSON.stringify(data),
             headers: {
                 // jwt
+                "user_token": userToken
             },
             success: function(result) {
                 if (result.code != 200) {
@@ -410,6 +413,15 @@
 
                 }
             },
+            error:function(err){
+                console.log(err);
+                if(err!=null && err.status==401){
+                    alert("用户未登录, 即将跳转到登录页!");
+                    // 跳转登录页
+                    window.location.href = "/blogin.html";
+                    window.parent.location.href = "/blogin.html";//让父页面一起跳转
+                }
+            }
         });
     }
 
