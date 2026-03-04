@@ -151,6 +151,14 @@ public class ActivityServiceImpl implements ActivityService {
 
     }
 
+    /**
+     * 根据活动基本信息、活动奖品信息、活动人员信息和奖品基本属性信息，整合成完整的活动详细信息
+     * @param activityDO
+     * @param activityPrizeDOList
+     * @param activityUserDOList
+     * @param prizeDOList
+     * @return
+     */
     private ActivityDetailDTO convertToActivityDetailDTO(ActivityDO activityDO, List<ActivityPrizeDO> activityPrizeDOList, List<ActivityUserDO> activityUserDOList, List<PrizeDO> prizeDOList) {
         ActivityDetailDTO detailDTO = new ActivityDetailDTO();
         detailDTO.setActivityId(activityDO.getId());
@@ -189,6 +197,7 @@ public class ActivityServiceImpl implements ActivityService {
                     ActivityDetailDTO.UserDTO userDTO = new ActivityDetailDTO.UserDTO();
                     userDTO.setUserId(activityUserDO.getUserId());
                     userDTO.setUserName(activityUserDO.getUserName());
+                    userDTO.setStatus(ActivityUSerStatusEnum.forName(activityUserDO.getStatus()));
                     return userDTO;
                 }).collect(Collectors.toList());
         detailDTO.setUserDTOList(userDTOList);
@@ -268,6 +277,41 @@ public class ActivityServiceImpl implements ActivityService {
             return activityDTO;
         }).collect(Collectors.toList());
         return new PageListDTO<>(total, activityDTOList);
+    }
+
+    @Override
+    public ActivityDetailDTO getActivityDetail(Long activityId) {
+        if (null == activityId) {
+            logger.warn("查询活动 id 不存在");
+            return null;
+        }
+        // 先从缓存中获取活动信息
+        ActivityDetailDTO detailDTO = getActivityFromCache(activityId);
+        if (null != detailDTO) {
+            logger.info("从缓存中获取活动信息成功, activityDTO= {}",
+                    JacksonUtil.writeValueAsString(detailDTO));
+            return detailDTO;
+        }
+
+        //  如果缓存中没有，再从数据库中获取活动信息
+        // 查询活动表
+        ActivityDO activityDO = activityMapper.selectById(activityId);
+
+        // 查询活动奖品表
+        List<ActivityPrizeDO> activityPrizeDO = activityPrizeMapper.selectByActivityId(activityId);
+        // 查询活动人员表
+        List<ActivityUserDO> activityUserDO = activityUserMapper.selectByActivityId(activityId);
+        // 查询奖品表，获取奖品基本属性
+        List<Long> prizeIds = activityPrizeDO.stream()
+                .map(ActivityPrizeDO::getPrizeId)
+                .collect(Collectors.toList());
+        List<PrizeDO> prizeDOList = prizeMapper.batchSelectByIds(prizeIds);
+
+        // 整合活动详细信息，返回Redis
+        detailDTO = convertToActivityDetailDTO(activityDO, activityPrizeDO, activityUserDO, prizeDOList);
+        cacheActivity(detailDTO);
+        // 返回活动详细信息
+        return detailDTO;
     }
 }
 

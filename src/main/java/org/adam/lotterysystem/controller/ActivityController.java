@@ -8,8 +8,10 @@ import org.adam.lotterysystem.controller.param.CreateActivityParam;
 import org.adam.lotterysystem.controller.param.PageParam;
 import org.adam.lotterysystem.controller.result.CreateActivityResult;
 import org.adam.lotterysystem.controller.result.FindActivityListResult;
+import org.adam.lotterysystem.controller.result.GetActivityDetailResult;
 import org.adam.lotterysystem.service.ActivityService;
 import org.adam.lotterysystem.service.dto.ActivityDTO;
+import org.adam.lotterysystem.service.dto.ActivityDetailDTO;
 import org.adam.lotterysystem.service.dto.CreateActivityDTO;
 import org.adam.lotterysystem.service.dto.PageListDTO;
 import org.slf4j.Logger;
@@ -20,6 +22,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.Comparator;
 import java.util.stream.Collectors;
 
 
@@ -47,6 +50,55 @@ public class ActivityController {
     public CommonResult<FindActivityListResult> findActivityList(PageParam param) {
         logger.info("查询活动列表, param: {}", JacksonUtil.writeValueAsString(param));
         return CommonResult.success(converToFindActivityListResult (activityService.findActivityList(param)));
+    }
+
+    @RequestMapping("/activity-detail/find")
+    public CommonResult<GetActivityDetailResult> getActivityDetail(Long activityId) {
+        logger.info("查询活动详情, activityId: {}", activityId);
+        ActivityDetailDTO detailDTO = activityService.getActivityDetail(activityId);
+        return CommonResult.success(convertoGetActivityDetailRestult(detailDTO));
+    }
+
+    private GetActivityDetailResult convertoGetActivityDetailRestult(ActivityDetailDTO detailDTO) {
+        if (null == detailDTO) {
+            throw new ControllerException(ControllerErrorCodeConstants.GET_ACTIVITY_DETAIL_ERROR);
+        }
+
+        GetActivityDetailResult result = new GetActivityDetailResult();
+        result.setActivityId(detailDTO.getActivityId());
+        result.setActivityName(detailDTO.getActivityName());
+        result.setDescription(detailDTO.getDescription());
+        result.setValid(detailDTO.valid());
+        // 抽奖顺序：1 2 3 等奖
+        result.setPrizeDTOList(
+                detailDTO.getPrizeDTOList()
+                        .stream()
+                        .sorted(Comparator.comparingInt(prizeDTO -> prizeDTO.getTiers().getCode()))
+                        .map(PrizeDTO -> {
+                            GetActivityDetailResult.Prize prize = new GetActivityDetailResult.Prize();
+                            prize.setId(PrizeDTO.getId());
+                            prize.setName(PrizeDTO.getName());
+                            prize.setImageUrl(PrizeDTO.getImageUrl());
+                            prize.setPrice(PrizeDTO.getPrice());
+                            prize.setDescription(PrizeDTO.getDescription());
+                            prize.setTiers(PrizeDTO.getTiers().getMessage());
+                            prize.setPrizeAmount(PrizeDTO.getPrizeAmount());
+                            prize.setValid(PrizeDTO.valid());
+                            return prize;
+                        }).collect(Collectors.toList())
+        );
+        result.setUserDTOList(
+                detailDTO.getUserDTOList()
+                        .stream()
+                        .map(userDTO -> {
+                            GetActivityDetailResult.User user = new GetActivityDetailResult.User();
+                            user.setUserId(userDTO.getUserId());
+                            user.setUserName(userDTO.getUserName());
+                            user.setValid(userDTO.valid());
+                            return user;
+                        }).collect(Collectors.toList())
+        );
+        return result;
     }
 
     private FindActivityListResult converToFindActivityListResult(PageListDTO<ActivityDTO> activityList) {

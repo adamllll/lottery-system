@@ -20,4 +20,7 @@ public interface ActivityMapper {
     @Select("select * from activity order by id desc limit #{offset}, #{pageSize}")
     List<ActivityDO> selectActivityList(
             @Param("offset") Integer offset, @Param("pageSize") Integer pageSize);
+
+    @Select("select * from activity where id = #{activityId}")
+    ActivityDO selectById(@Param("activityId") Long activityId);
 }

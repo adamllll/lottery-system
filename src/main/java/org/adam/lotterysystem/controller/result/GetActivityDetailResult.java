@@ -1,16 +1,19 @@
-package org.adam.lotterysystem.service.dto;
+package org.adam.lotterysystem.controller.result;
 
 import lombok.Data;
+import org.adam.lotterysystem.service.dto.ActivityDetailDTO;
 import org.adam.lotterysystem.service.enums.ActivityPrizeStatusEnum;
 import org.adam.lotterysystem.service.enums.ActivityPrizeTiersEnum;
 import org.adam.lotterysystem.service.enums.ActivityStatusEnum;
 import org.adam.lotterysystem.service.enums.ActivityUSerStatusEnum;
+import org.apache.catalina.User;
 
+import java.io.Serializable;
 import java.math.BigDecimal;
 import java.util.List;
 
 @Data
-public class ActivityDetailDTO {
+public class GetActivityDetailResult implements Serializable {
     // 活动信息
     private Long activityId;
 
@@ -20,22 +23,17 @@ public class ActivityDetailDTO {
     // 活动描述
     private String description;
 
-    // 活动状态
-    private ActivityStatusEnum status;
-
     // 活动是否有效
-    public Boolean valid() {
-        return status.equals(ActivityStatusEnum.RUNNING);
-    }
+    private Boolean valid;
 
     // 奖品信息(列表)
-    private List<PrizeDTO> prizeDTOList;
+    private List<Prize> prizeDTOList;
 
     // 人员信息(列表)
-    private List<UserDTO> userDTOList;
+    private List<User> userDTOList;
 
     @Data
-    public static class PrizeDTO {
+    public static class Prize {
         // 奖品 id
         private Long id;
 
@@ -51,33 +49,29 @@ public class ActivityDetailDTO {
         // 奖品描述
         private String description;
 
-        // 奖品等级
-        private ActivityPrizeTiersEnum tiers;
+        /**
+         * 奖品等级
+         * @see ActivityPrizeTiersEnum#getMessage()
+         */
+        private String tiers;
 
         // 奖品数量
         private Long prizeAmount;
 
-        // 奖品状态
-        private ActivityPrizeStatusEnum status;
+        // 奖品是否有效
+        private Boolean valid;
 
-        public Boolean valid() {
-            return status.equals(ActivityPrizeStatusEnum.INIT);
-        }
     }
 
     @Data
-    public static class UserDTO {
+    public static class User {
         // 用户 id
         private Long userId;
 
         // 用户名称
         private String UserName;
 
-        // 用户状态
-        private ActivityUSerStatusEnum status;
-
-        public Boolean valid() {
-            return status.equals(ActivityUSerStatusEnum.INIT);
-        }
+        // 用户是否有效
+        private Boolean valid;
     }
 }
