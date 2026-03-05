@@ -1,5 +1,6 @@
 package org.adam.lotterysystem.dao.mapper;
 
+import jakarta.validation.constraints.NotNull;
 import org.adam.lotterysystem.dao.dataobject.ActivityPrizeDO;
 import org.apache.ibatis.annotations.*;
 
@@ -19,4 +20,7 @@ public interface ActivityPrizeMapper {
 
     @Select("select * from activity_prize where activity_id = #{activityId}")
     List<ActivityPrizeDO> selectByActivityId(@Param("activityId") Long activityId);
+
+    @Select("select * from activity_prize where activity_id = #{activityId} and prize_id = #{prizeId}")
+    ActivityPrizeDO selectByActivityPrizeId(@Param("activityId") Long activityId, @Param("prizeId") Long prizeId);
 }

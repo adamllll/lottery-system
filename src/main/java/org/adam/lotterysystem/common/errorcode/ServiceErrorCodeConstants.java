@@ -31,7 +31,12 @@ public interface ServiceErrorCodeConstants {
     ErrorCode CREATE_PRIZE_USER_ERROR = new ErrorCode(303, "创建活动关联的奖品及人员信息错误");
     ErrorCode CREATE_ACTIVITY_PRIZE_TIERS_ERROR = new ErrorCode(304, "创建活动关联的奖品等级信息错误");
     ErrorCode CREATE_ACTIVITY_USER_AMOUNT_LT_PRIZE_AMOUNT_ERROR = new ErrorCode(305, "活动关联人员数量不能小于奖品总数量");
+
     // 抽奖错误码
+    ErrorCode DRAW_PRIZE_PARAM_ERROR = new ErrorCode(400, "抽奖活动或活动奖品参数错误");
+    ErrorCode DRAW_ACTIVITY_END = new ErrorCode(401, "抽奖活动已结束");
+    ErrorCode DRAW_PRIZE_END = new ErrorCode(402, "奖品已被抽取已结束");
+    ErrorCode DRAW_PRIZE_WINNER_LIST_ERROR = new ErrorCode(403, "中奖者列表人数和中奖者人数不一致");
 
     // 图片错误码
      ErrorCode PICTURE_SAVE_ERROR = new ErrorCode(500, "图片保存失败");
