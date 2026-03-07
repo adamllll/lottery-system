@@ -313,6 +313,40 @@ public class ActivityServiceImpl implements ActivityService {
         // 返回活动详细信息
         return detailDTO;
     }
+
+    /**
+     *
+     * @param activityId
+     */
+    @Override
+    public void cacheActivity(Long activityId) {
+
+        if (null == activityId) {
+            logger.warn("缓存活动失败, activityId={}", activityId);
+            throw new ServiceException(ServiceErrorCodeConstants.CACHE_ACTIVITY_ID_IS_NULL);
+        }
+
+        // 查询表数据： 活动表、活动奖品表、活动人员表、奖品表
+        ActivityDO activityDO = activityMapper.selectById(activityId);
+        if (null == activityDO) {
+            logger.error("查询活动表数据不存在, activityId={}", activityId);
+            throw new ServiceException(ServiceErrorCodeConstants.CACHE_ACTIVITY_ID_IS_NULL);
+        }
+
+        // 查询活动奖品表
+        List<ActivityPrizeDO> activityPrizeDO = activityPrizeMapper.selectByActivityId(activityId);
+        // 查询活动人员表
+        List<ActivityUserDO> activityUserDO = activityUserMapper.selectByActivityId(activityId);
+        // 查询奖品表，获取奖品基本属性
+        List<Long> prizeIds = activityPrizeDO.stream()
+                .map(ActivityPrizeDO::getPrizeId)
+                .collect(Collectors.toList());
+        List<PrizeDO> prizeDOList = prizeMapper.batchSelectByIds(prizeIds);
+
+        // 整合活动详细信息，返回Redis
+        // 整合完整的活动信息并缓存
+        cacheActivity(convertToActivityDetailDTO(activityDO, activityPrizeDO, activityUserDO, prizeDOList));
+    }
 }
 
 

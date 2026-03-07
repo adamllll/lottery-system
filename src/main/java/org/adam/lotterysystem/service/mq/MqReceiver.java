@@ -6,6 +6,9 @@ import org.adam.lotterysystem.controller.param.DrawPrizeParam;
 import org.adam.lotterysystem.service.DrawPrizeService;
 import org.adam.lotterysystem.service.activitystatus.ActivityStatusManager;
 import org.adam.lotterysystem.service.dto.ConvertActivityStatusDTO;
+import org.adam.lotterysystem.service.enums.ActivityPrizeStatusEnum;
+import org.adam.lotterysystem.service.enums.ActivityStatusEnum;
+import org.adam.lotterysystem.service.enums.ActivityUSerStatusEnum;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.rabbit.annotation.RabbitHandler;
@@ -14,6 +17,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import static org.adam.lotterysystem.common.config.DirectRabbitConfig.QUEUE_NAME;
 
@@ -59,6 +63,17 @@ public class MqReceiver {
     // 状态扭转
     private void statusConvert(DrawPrizeParam param) {
         ConvertActivityStatusDTO convertActivityStatusDTO = new ConvertActivityStatusDTO();
+        activityStatusManager.handlerEvent(convertActivityStatusDTO);
+        convertActivityStatusDTO.setActivityId(param.getActivityId());
+        convertActivityStatusDTO.setTargetActivityStatus(ActivityStatusEnum.END);
+        convertActivityStatusDTO.setPrizeId(param.getPrizeId());
+        convertActivityStatusDTO.setTargetPrizeStatus(ActivityPrizeStatusEnum.END);
+        convertActivityStatusDTO.setUserIds(
+                param.getWinnerList()
+                        .stream()
+                        .map(DrawPrizeParam.Winner::getUserId)
+                        .collect(Collectors.toList()));
+        convertActivityStatusDTO.setTargetUserStatus(ActivityUSerStatusEnum.END);
         activityStatusManager.handlerEvent(convertActivityStatusDTO);
     }
 /*    private void statusConvert(DrawPrizeParam param) {

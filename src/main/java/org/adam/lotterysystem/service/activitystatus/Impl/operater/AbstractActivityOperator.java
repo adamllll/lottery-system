@@ -9,4 +9,7 @@ public abstract class AbstractActivityOperator {
 
     // 是否需要转换
     public abstract Boolean needConvert(ConvertActivityStatusDTO convertActivityStatusDTO);
+
+    // 执行转换
+    public abstract Boolean convert(ConvertActivityStatusDTO convertActivityStatusDTO);
 }

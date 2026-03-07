@@ -19,4 +19,7 @@ public interface ActivityService {
 
     // 查询活动详情
     ActivityDetailDTO getActivityDetail(Long activityId);
+
+    // 缓存活动详细信息(读取表数据再缓存)
+    void cacheActivity(Long activityId);
 }

@@ -9,6 +9,7 @@ import org.adam.lotterysystem.dao.dataobject.ActivityPrizeDO;
 import org.adam.lotterysystem.dao.mapper.ActivityMapper;
 import org.adam.lotterysystem.dao.mapper.ActivityPrizeMapper;
 import org.adam.lotterysystem.service.DrawPrizeService;
+import org.adam.lotterysystem.service.enums.ActivityPrizeStatusEnum;
 import org.adam.lotterysystem.service.enums.ActivityStatusEnum;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -64,7 +65,7 @@ public class DrawPrizeServiceImpl implements DrawPrizeService {
             throw new ServiceException(ServiceErrorCodeConstants.DRAW_ACTIVITY_END);
         }
         // 奖品是否有效
-        if (activityPrizeDO.getStatus().equalsIgnoreCase(ActivityStatusEnum.END.name())) {
+        if (activityPrizeDO.getStatus().equalsIgnoreCase(ActivityPrizeStatusEnum.END.name())) {
             throw new ServiceException(ServiceErrorCodeConstants.DRAW_PRIZE_END);
         }
         // 中奖者人数是否和中奖者列表人数一致
