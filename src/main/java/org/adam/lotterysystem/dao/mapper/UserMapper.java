@@ -1,6 +1,7 @@
 package org.adam.lotterysystem.dao.mapper;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import org.adam.lotterysystem.dao.dataobject.Encrypt;
 import org.adam.lotterysystem.dao.dataobject.UserDO;
 import org.apache.ibatis.annotations.*;
@@ -53,4 +54,12 @@ public interface UserMapper {
             "</foreach> " +
             "</script>")
     List<Long> selectExistByIds(@Param("items") List<Long> ids);
+
+    @Select("<script>" +
+            "select * from user where id in " +
+            "<foreach item='item' collection='items' open='(' separator=',' close=')'> " +
+            "#{item} " +
+            "</foreach> " +
+            "</script>")
+    List<UserDO> batchSelectByIds(@Param("items") List<Long> ids);
 }

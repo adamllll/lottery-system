@@ -1,5 +1,6 @@
 package org.adam.lotterysystem.dao.mapper;
 
+import jakarta.validation.constraints.NotNull;
 import org.adam.lotterysystem.dao.dataobject.PrizeDO;
 import org.apache.ibatis.annotations.*;
 
@@ -35,4 +36,7 @@ public interface PrizeMapper {
             "</foreach> " +
             "</script>")
     List<PrizeDO> batchSelectByIds(@Param("items") List<Long> ids);
+
+    @Select("select * from prize where id = #{prizeId}")
+    PrizeDO selectExistById(@Param("prizeId") Long prizeId);
 }

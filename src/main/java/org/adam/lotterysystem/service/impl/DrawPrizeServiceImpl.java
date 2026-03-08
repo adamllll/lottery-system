@@ -1,13 +1,13 @@
 package org.adam.lotterysystem.service.impl;
 
+import cn.hutool.core.collection.CollectionUtil;
 import org.adam.lotterysystem.common.errorcode.ServiceErrorCodeConstants;
 import org.adam.lotterysystem.common.exception.ServiceException;
 import org.adam.lotterysystem.common.utils.JacksonUtil;
+import org.adam.lotterysystem.common.utils.RedisUtil;
 import org.adam.lotterysystem.controller.param.DrawPrizeParam;
-import org.adam.lotterysystem.dao.dataobject.ActivityDO;
-import org.adam.lotterysystem.dao.dataobject.ActivityPrizeDO;
-import org.adam.lotterysystem.dao.mapper.ActivityMapper;
-import org.adam.lotterysystem.dao.mapper.ActivityPrizeMapper;
+import org.adam.lotterysystem.dao.dataobject.*;
+import org.adam.lotterysystem.dao.mapper.*;
 import org.adam.lotterysystem.service.DrawPrizeService;
 import org.adam.lotterysystem.service.enums.ActivityPrizeStatusEnum;
 import org.adam.lotterysystem.service.enums.ActivityStatusEnum;
@@ -16,10 +16,11 @@ import org.slf4j.LoggerFactory;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.util.CollectionUtils;
+import org.springframework.util.StringUtils;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
+import java.util.stream.Collectors;
 
 import static org.adam.lotterysystem.common.config.DirectRabbitConfig.EXCHANGE_NAME;
 import static org.adam.lotterysystem.common.config.DirectRabbitConfig.ROUTING;
@@ -28,15 +29,23 @@ import static org.adam.lotterysystem.common.config.DirectRabbitConfig.ROUTING;
 public class DrawPrizeServiceImpl implements DrawPrizeService {
 
     private static final Logger logger = LoggerFactory.getLogger(DrawPrizeServiceImpl.class);
+    private final String WINNING_RECORDS_CACHE_KEY_PREFIX = "WinningRecords_"; // 中奖记录缓存 key 前缀
+    private final Long WINNING_RECORD_CACHE_EXPIRE = 60L * 60L * 24L * 2L; // 中奖记录缓存过期时间，单位：秒
 
     @Autowired
     private RabbitTemplate rabbitTemplate;
-
     @Autowired
     private ActivityMapper activityMapper;
-
     @Autowired
     private ActivityPrizeMapper activityPrizeMapper;
+    @Autowired
+    private UserMapper userMapper;
+    @Autowired
+    private PrizeMapper prizeMapper;
+    @Autowired
+    private WinningRecordMapper winningRecordMapper;
+    @Autowired
+    private RedisUtil redisUtil;
 
     @Override
     public void drawPrize(DrawPrizeParam param) {
@@ -71,6 +80,135 @@ public class DrawPrizeServiceImpl implements DrawPrizeService {
         // 中奖者人数是否和中奖者列表人数一致
         if (activityPrizeDO.getPrizeAmount() != param.getWinnerList().size()) {
             throw new ServiceException(ServiceErrorCodeConstants.DRAW_PRIZE_WINNER_LIST_ERROR);
+        }
+    }
+
+    @Override
+    public List<WinningRecordDO> saveWinnerRecords(DrawPrizeParam param) {
+        // 查询相关信息：活动、人员、奖品、活动关联奖品表
+        ActivityDO activityDO = activityMapper.selectById(param.getActivityId());
+        List<UserDO> userDOS = userMapper.batchSelectByIds(param.getWinnerList()
+                .stream()
+                .map(DrawPrizeParam.Winner::getUserId)
+                .collect(Collectors.toList()));
+        PrizeDO prizeDO = prizeMapper.selectExistById(param.getPrizeId());
+        ActivityPrizeDO activityPrizeDO = activityPrizeMapper.selectByActivityPrizeId(param.getActivityId(), param.getPrizeId());
+        // 构造中奖者记录
+        List<WinningRecordDO> winningRecordDOS = userDOS.stream()
+                .map(userDO -> {
+                    WinningRecordDO winningRecordDO = new WinningRecordDO();
+                    winningRecordDO.setActivityId(activityDO.getId());
+                    winningRecordDO.setActivityName(activityDO.getActivityName());
+                    winningRecordDO.setPrizeId(prizeDO.getId());
+                    winningRecordDO.setPrizeName(prizeDO.getName());
+                    winningRecordDO.setPrizeTier(activityPrizeDO.getPrizeTiers());
+                    winningRecordDO.setWinnerId(userDO.getId());
+                    winningRecordDO.setWinnerName(userDO.getUserName());
+                    winningRecordDO.setWinnerPhoneNumber(userDO.getPhoneNumber());
+                    winningRecordDO.setWinnerEmail(userDO.getEmail());
+                    winningRecordDO.setWinningTime(param.getWinningTime());
+                    return winningRecordDO;
+                })
+                .collect(Collectors.toList());
+        winningRecordMapper.batchInsert(winningRecordDOS);
+        // 缓存中奖者记录
+        // 1. 缓存奖品维度中奖记录(WinningRecord_activityId_prizeId, winningRecordDOS(奖品维度的中奖名单))
+        cacheWinningRecords(param.getActivityId() + "_" + param.getPrizeId(), winningRecordDOS, WINNING_RECORD_CACHE_EXPIRE);
+        // 2. 缓存活动维度中奖记录(WinningRecord_activityId, winningRecordDOS(活动维度的中奖名单))
+        // 当活动已完成的时候，才会缓存活动维度的中奖记录，因为活动维度的中奖记录是需要在抽奖过程中不断更新的，
+        // 如果活动未完成，频繁更新活动维度的中奖记录会增加缓存压力
+        if (activityDO.getStatus()
+                .equalsIgnoreCase(ActivityStatusEnum.END.name())) {
+            // 查询活动维度的全量中奖记录
+            List<WinningRecordDO> allList = winningRecordMapper.selectByActivityId(param.getActivityId());
+            cacheWinningRecords(String.valueOf(param.getActivityId()), allList, WINNING_RECORD_CACHE_EXPIRE);
+        }
+        return winningRecordDOS;
+    }
+
+    /**
+     * 删除中奖者记录
+     * @param activityId
+     * @param prizeId
+     */
+    @Override
+    public void deleteWinnerRecords(Long activityId, Long prizeId) {
+        if (null == activityId) {
+            logger.warn("要删除中奖者记录的活动id为空！");
+            return;
+        }
+        // 删除数据库中奖者记录
+        winningRecordMapper.deleteByActivityIdAndPrizeId(activityId, prizeId);
+        // 删除缓存(奖品维度，活动维度)
+        if (null != prizeId) {
+            deleteWinningRecordsCache(activityId + "_" + prizeId);
+        }
+        // 无论是否传递了 prizeId，都要删除活动维度的中奖记录缓存
+        // 因为活动维度的中奖记录缓存中包含了奖品维度的中奖记录，所以无论是否传递了 prizeId，都要删除活动维度的中奖记录缓存
+        deleteWinningRecordsCache(String.valueOf(activityId));
+    }
+
+
+    /**
+     * 缓存中奖者记录
+     * @param key
+     * @param winningRecordDOS
+     * @param time
+     */
+    private void cacheWinningRecords(String key, List<WinningRecordDO> winningRecordDOS, Long time) {
+        String str = "";
+        try {
+            if (!StringUtils.hasText(key)
+                    || CollectionUtils.isEmpty(winningRecordDOS)) {
+                logger.warn("缓存中奖者记录为空！ key:{}, value:{}", WINNING_RECORDS_CACHE_KEY_PREFIX + key, winningRecordDOS);
+                return;
+            }
+
+            str = JacksonUtil.writeValueAsString(winningRecordDOS);
+            redisUtil.set(WINNING_RECORDS_CACHE_KEY_PREFIX + key,
+                    str,
+                    time);
+        } catch (Exception e) {
+            logger.error("缓存中奖者记录发生异常: key:{}, value:{}", WINNING_RECORDS_CACHE_KEY_PREFIX + key, str, e);
+             // 如果发生异常，缓存中奖者记录失败，不影响正常的业务流程，所以不抛出异常
+        }
+    }
+
+    /**
+     * 获取缓存中奖者记录
+     * @param key
+     * @return
+     */
+    private List<WinningRecordDO> getCacheWinningRecords(String key) {
+        try {
+            String str = redisUtil.get(WINNING_RECORDS_CACHE_KEY_PREFIX + key);
+            if (!StringUtils.hasText(key)) {
+                logger.warn("获取缓存中奖者 key 为空");
+                return null;
+            }
+            if (!StringUtils.hasText(str)) {
+                return Arrays.asList();
+            }
+            return JacksonUtil.readListValue(str, WinningRecordDO.class);
+        } catch (Exception e) {
+            logger.error("获取缓存中奖者记录发生异常: key:{}", WINNING_RECORDS_CACHE_KEY_PREFIX + key, e);
+            // 如果发生异常，获取缓存中奖者记录失败，不影响正常的业务流程，所以不抛出异常
+            return Arrays.asList();
+        }
+    }
+
+    /**
+     * 删除中奖者记录缓存(奖品维度，活动维度)
+     * @param key
+     */
+    private void deleteWinningRecordsCache(String key) {
+        try {
+            if (redisUtil.haskey(WINNING_RECORDS_CACHE_KEY_PREFIX + key)) {
+                // 存在删除
+                redisUtil.del(WINNING_RECORDS_CACHE_KEY_PREFIX + key);
+            }
+        } catch (Exception e) {
+            logger.error("删除中奖者记录缓存发生异常: key:{}", WINNING_RECORDS_CACHE_KEY_PREFIX + key, e);
         }
     }
 }
