@@ -16,6 +16,7 @@ import org.adam.lotterysystem.service.DrawPrizeService;
 import org.adam.lotterysystem.service.activitystatus.ActivityStatusManager;
 import org.adam.lotterysystem.service.dto.ConvertActivityStatusDTO;
 import org.adam.lotterysystem.service.enums.ActivityPrizeStatusEnum;
+import org.adam.lotterysystem.service.enums.ActivityPrizeTiersEnum;
 import org.adam.lotterysystem.service.enums.ActivityStatusEnum;
 import org.adam.lotterysystem.service.enums.ActivityUSerStatusEnum;
 import org.slf4j.Logger;
@@ -179,7 +180,7 @@ public class MqReceiver {
             // 发送邮件通知
             String context = "Hi," + winningRecordDO.getWinnerName()
                     + "，恭喜你在：" + winningRecordDO.getActivityName()
-                    + "活动中抽中了奖品：" + ActivityPrizeStatusEnum.forName(winningRecordDO.getPrizeTier()).getMessage()
+                    + "活动中抽中了奖品：" + ActivityPrizeTiersEnum.forName(winningRecordDO.getPrizeTier()).getMessage()
                     + ": " + winningRecordDO.getPrizeName()
                     + "获奖时间为：" + DateUtil.formatTime(winningRecordDO.getWinningTime()) + "请尽快联系管理员领取奖品！";
             mailUtil.sendSampleMail(winningRecordDO.getWinnerEmail(), "抽奖中奖通知", context);
