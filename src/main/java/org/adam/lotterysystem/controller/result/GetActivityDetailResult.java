@@ -27,10 +27,10 @@ public class GetActivityDetailResult implements Serializable {
     private Boolean valid;
 
     // 奖品信息(列表)
-    private List<Prize> prizeDTOList;
+    private List<Prize> prizes;
 
     // 人员信息(列表)
-    private List<User> userDTOList;
+    private List<User> users;
 
     @Data
     public static class Prize {

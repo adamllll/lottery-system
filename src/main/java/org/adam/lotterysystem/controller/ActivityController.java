@@ -70,7 +70,7 @@ public class ActivityController {
         result.setDescription(detailDTO.getDescription());
         result.setValid(detailDTO.valid());
         // 抽奖顺序：1 2 3 等奖
-        result.setPrizeDTOList(
+        result.setPrizes(
                 detailDTO.getPrizeDTOList()
                         .stream()
                         .sorted(Comparator.comparingInt(prizeDTO -> prizeDTO.getTiers().getCode()))
@@ -87,7 +87,7 @@ public class ActivityController {
                             return prize;
                         }).collect(Collectors.toList())
         );
-        result.setUserDTOList(
+        result.setUsers(
                 detailDTO.getUserDTOList()
                         .stream()
                         .map(userDTO -> {

@@ -65,7 +65,11 @@ public class MqReceiver {
         // 处理抽奖逻辑
         try {
             // 校验抽奖请求是否有效
-            drawPrizeService.checkDrawPrizeStatus(param);
+            // 1. 前端有可能发起两个一样的抽奖请求，对于param来说也是一样的两个请求
+            // 2. param：最后一个奖项： 处理param1：活动完成、奖品完成 处理param2：回滚活动、奖品状态
+            if (!drawPrizeService.checkDrawPrizeStatus(param)) {
+                return;
+            }
 
             // 状态扭转处理
             statusConvert(param);

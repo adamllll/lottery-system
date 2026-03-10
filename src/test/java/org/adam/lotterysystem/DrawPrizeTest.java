@@ -2,10 +2,7 @@ package org.adam.lotterysystem;
 
 import org.adam.lotterysystem.common.exception.ServiceException;
 import org.adam.lotterysystem.common.utils.JacksonUtil;
-import org.adam.lotterysystem.controller.param.CreateActivityParam;
-import org.adam.lotterysystem.controller.param.CreatePrizeByActivityParam;
-import org.adam.lotterysystem.controller.param.CreateUserByActivityParam;
-import org.adam.lotterysystem.controller.param.DrawPrizeParam;
+import org.adam.lotterysystem.controller.param.*;
 import org.adam.lotterysystem.dao.dataobject.ActivityDO;
 import org.adam.lotterysystem.dao.dataobject.ActivityPrizeDO;
 import org.adam.lotterysystem.dao.dataobject.ActivityUserDO;
@@ -19,6 +16,7 @@ import org.adam.lotterysystem.service.DrawPrizeService;
 import org.adam.lotterysystem.service.activitystatus.ActivityStatusManager;
 import org.adam.lotterysystem.service.dto.ConvertActivityStatusDTO;
 import org.adam.lotterysystem.service.dto.CreateActivityDTO;
+import org.adam.lotterysystem.service.dto.WinningRecordDTO;
 import org.adam.lotterysystem.service.enums.ActivityPrizeStatusEnum;
 import org.adam.lotterysystem.service.enums.ActivityPrizeTiersEnum;
 import org.adam.lotterysystem.service.enums.ActivityStatusEnum;
@@ -286,6 +284,69 @@ public class DrawPrizeTest {
         }
     }
 
+    // ==================== 集成测试：异常重发（死信队列） ====================
+
+    /**
+     * 测试处理过程中发生异常时的消息重发流程：
+     * 消息堆积 -> 处理异常(回滚) -> 消息进入死信队列 -> DlxReceiver重发 -> 再次处理成功
+     *
+     * 模拟流程：
+     * 1. 第一次调用 MqReceiver.process()，saveWinnerRecords 抛出异常
+     * 2. 验证：状态和中奖记录已回滚至初始状态
+     * 3. 模拟 DlxReceiver 接收死信消息并重新投递（直接调用 mqReceiver.process()）
+     * 4. 验证：第二次处理成功，中奖记录已持久化，状态已扭转
+     */
+    @Test
+    void testMessageRedeliveryViaDlxWhenProcessFails() {
+        // ---- 准备阶段 ----
+        Long activityId = createTestActivity("draw-dlx-retry-test-");
+        DrawPrizeParam param = buildDrawPrizeParam(activityId);
+        Map<String, String> message = buildMqMessage(param);
+
+        // ---- 第一次处理：模拟异常 ----
+        // 用 Mockito spy 让 saveWinnerRecords 仅在第一次调用时抛出异常
+        DrawPrizeService spyService = Mockito.spy(drawPrizeService);
+        Mockito.doThrow(new ServiceException(500, "mock: 保存中奖记录时数据库连接超时"))
+                .doCallRealMethod() // 第二次调用恢复真实逻辑
+                .when(spyService).saveWinnerRecords(any());
+
+        DrawPrizeService originalService = (DrawPrizeService) ReflectionTestUtils.getField(mqReceiver, "drawPrizeService");
+        try {
+            ReflectionTestUtils.setField(mqReceiver, "drawPrizeService", spyService);
+
+            // 第一次处理：预期抛出异常（消息会被 RabbitMQ nack，路由到死信队列）
+            assertThrows(ServiceException.class, () -> mqReceiver.process(message),
+                    "第一次处理应抛出异常，触发消息进入死信队列");
+
+            // 验证：回滚已执行，状态恢复为初始状态
+            assertStatusRolledBack(activityId);
+
+            // ---- 第二次处理：模拟 DlxReceiver 重发后的重新消费 ----
+            // 生产环境中：DlxReceiver 从死信队列取出消息 -> convertAndSend 回原队列 -> MqReceiver 再次消费
+            // 测试中：直接再次调用 mqReceiver.process() 模拟重发后的重新处理
+            mqReceiver.process(message);
+
+            // ---- 验证：第二次处理成功 ----
+            // 1. 中奖记录已持久化
+            List<WinningRecordDO> winningRecords = winningRecordMapper.selectByActivityId(activityId);
+            assertNotNull(winningRecords);
+            assertFalse(winningRecords.isEmpty(), "重发后中奖记录应已持久化");
+
+            // 2. 奖品状态已扭转为 END
+            ActivityPrizeDO afterPrize = activityPrizeMapper.selectByActivityPrizeId(activityId, PRIZE_ID);
+            assertEquals(ActivityPrizeStatusEnum.END.name(), afterPrize.getStatus(),
+                    "重发后奖品状态应为END");
+
+            // 3. 人员状态已扭转为 END
+            List<ActivityUserDO> afterUserList = activityUserMapper.batchSelectByActivityUserIds(activityId, List.of(USER_ID));
+            assertFalse(afterUserList.isEmpty());
+            assertEquals(ActivityUSerStatusEnum.END.name(), afterUserList.get(0).getStatus(),
+                    "重发后人员状态应为END");
+        } finally {
+            ReflectionTestUtils.setField(mqReceiver, "drawPrizeService", originalService);
+        }
+    }
+
     /**
      * 测试saveWinnerRecords抛出ServiceException时，状态和中奖记录回滚
      */
@@ -311,4 +372,17 @@ public class DrawPrizeTest {
         }
     }
 
+    /**
+     * 测试查询中奖记录接口，验证返回的中奖记录信息正确
+     */
+    @Test
+    void testShowWinningRecords() {
+        ShowWinningRecordsParam param = new ShowWinningRecordsParam();
+        param.setActivityId(27L);
+        List<WinningRecordDTO> winningRecordDTOS = drawPrizeService.getRecords(param);
+        for (WinningRecordDTO dto : winningRecordDTOS) {
+            // 中奖者_奖品_等级
+            System.out.println(dto.getWinnerName() + "_" + dto.getPrizeName() + "_" + dto.getPrizeTier());
+        }
+    }
 }

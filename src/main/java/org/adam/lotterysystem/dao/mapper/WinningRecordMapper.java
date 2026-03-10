@@ -35,4 +35,14 @@ public interface WinningRecordMapper {
     void deleteByActivityIdAndPrizeId(
             @Param("activityId") Long activityId,
             @Param("prizeId") Long prizeId);
+
+    @Select("<script>" +
+            "select * from winning_record where activity_id = #{activityId} " +
+            "<if test=\"prizeId != null\"> " +
+            "and prize_id = #{prizeId} " +
+            "</if>" +
+            "order by winning_time desc" +
+            "</script>")
+    List<WinningRecordDO> selectByActivityIdOrPrizeId(@Param("activityId") Long activityId,
+                                                      @Param("prizeId") Long prizeId);
 }

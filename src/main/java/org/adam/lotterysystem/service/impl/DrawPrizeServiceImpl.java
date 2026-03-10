@@ -6,10 +6,13 @@ import org.adam.lotterysystem.common.exception.ServiceException;
 import org.adam.lotterysystem.common.utils.JacksonUtil;
 import org.adam.lotterysystem.common.utils.RedisUtil;
 import org.adam.lotterysystem.controller.param.DrawPrizeParam;
+import org.adam.lotterysystem.controller.param.ShowWinningRecordsParam;
 import org.adam.lotterysystem.dao.dataobject.*;
 import org.adam.lotterysystem.dao.mapper.*;
 import org.adam.lotterysystem.service.DrawPrizeService;
+import org.adam.lotterysystem.service.dto.WinningRecordDTO;
 import org.adam.lotterysystem.service.enums.ActivityPrizeStatusEnum;
+import org.adam.lotterysystem.service.enums.ActivityPrizeTiersEnum;
 import org.adam.lotterysystem.service.enums.ActivityStatusEnum;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -59,7 +62,7 @@ public class DrawPrizeServiceImpl implements DrawPrizeService {
     }
 
     @Override
-    public void checkDrawPrizeStatus(DrawPrizeParam param) {
+    public Boolean checkDrawPrizeStatus(DrawPrizeParam param) {
 
         ActivityDO activityDO = activityMapper.selectById(param.getActivityId());
         // 奖品是否存在可以在 activity_prize 表中查询(在保存activity做了本地事务保证了奖品和活动的关系，所以这里不需要单独查询奖品表了)
@@ -67,20 +70,29 @@ public class DrawPrizeServiceImpl implements DrawPrizeService {
                 param.getActivityId(), param.getPrizeId());
         // 判断活动活着奖品是否存在
         if (null == activityDO || null == activityPrizeDO) {
-            throw new ServiceException(ServiceErrorCodeConstants.DRAW_PRIZE_PARAM_ERROR);
+//            throw new ServiceException(ServiceErrorCodeConstants.DRAW_PRIZE_PARAM_ERROR);
+            logger.info("校验抽奖请求失败！：{}", ServiceErrorCodeConstants.DRAW_PRIZE_PARAM_ERROR.getMsg());
+            return false;
         }
         // 判断活动是否有效
         if (activityDO.getStatus().equalsIgnoreCase(ActivityStatusEnum.END.name())) {
-            throw new ServiceException(ServiceErrorCodeConstants.DRAW_ACTIVITY_END);
+//            throw new ServiceException(ServiceErrorCodeConstants.DRAW_ACTIVITY_END);
+            logger.info("校验抽奖请求失败！：{}", ServiceErrorCodeConstants.DRAW_PRIZE_PARAM_ERROR.getMsg());
+            return false;
         }
         // 奖品是否有效
         if (activityPrizeDO.getStatus().equalsIgnoreCase(ActivityPrizeStatusEnum.END.name())) {
-            throw new ServiceException(ServiceErrorCodeConstants.DRAW_PRIZE_END);
+//            throw new ServiceException(ServiceErrorCodeConstants.DRAW_PRIZE_END);
+            logger.info("校验抽奖请求失败！：{}", ServiceErrorCodeConstants.DRAW_PRIZE_PARAM_ERROR.getMsg());
+            return false;
         }
         // 中奖者人数是否和中奖者列表人数一致
         if (activityPrizeDO.getPrizeAmount() != param.getWinnerList().size()) {
-            throw new ServiceException(ServiceErrorCodeConstants.DRAW_PRIZE_WINNER_LIST_ERROR);
+//            throw new ServiceException(ServiceErrorCodeConstants.DRAW_PRIZE_WINNER_LIST_ERROR);
+            logger.info("校验抽奖请求失败！：{}", ServiceErrorCodeConstants.DRAW_PRIZE_WINNER_LIST_ERROR.getMsg());
+            return false;
         }
+        return true;
     }
 
     @Override
@@ -146,6 +158,55 @@ public class DrawPrizeServiceImpl implements DrawPrizeService {
         // 无论是否传递了 prizeId，都要删除活动维度的中奖记录缓存
         // 因为活动维度的中奖记录缓存中包含了奖品维度的中奖记录，所以无论是否传递了 prizeId，都要删除活动维度的中奖记录缓存
         deleteWinningRecordsCache(String.valueOf(activityId));
+    }
+
+    /**
+     * 获取中奖记录
+     * @param param
+     * @return
+     */
+    @Override
+    public List<WinningRecordDTO> getRecords(ShowWinningRecordsParam param) {
+        // 先从缓存中获取中奖记录（奖品、活动）
+        String key = null == param.getPrizeId()
+                ? String.valueOf(param.getActivityId())
+                : param.getActivityId() + "_" + param.getPrizeId();
+        List<WinningRecordDO> cacheWinningRecords = getCacheWinningRecords(key);
+        if (!CollectionUtils.isEmpty(cacheWinningRecords)) {
+            return convertToWinningRecordDTOS(cacheWinningRecords);
+        }
+        // 如果缓存中没有，再从数据库中获取，并且更新缓存
+        cacheWinningRecords = winningRecordMapper.selectByActivityIdOrPrizeId(param.getActivityId(), param.getPrizeId());
+        // 存放记录到缓存中
+        if (CollectionUtils.isEmpty(cacheWinningRecords)) {
+            logger.info("查询的中奖记录为空！ param:{}", JacksonUtil.writeValueAsString(param));
+            return Arrays.asList();
+        }
+        cacheWinningRecords(key, cacheWinningRecords, WINNING_RECORD_CACHE_EXPIRE);
+        return convertToWinningRecordDTOS(cacheWinningRecords);
+    }
+
+    /**
+     * 将 WinningRecordDO 列表转换为 WinningRecordDTO 列表
+     * @param cacheWinningRecords
+     * @return
+     */
+    private List<WinningRecordDTO> convertToWinningRecordDTOS(List<WinningRecordDO> cacheWinningRecords) {
+        if (CollectionUtils.isEmpty(cacheWinningRecords)) {
+            return Arrays.asList();
+        }
+        return cacheWinningRecords.stream()
+                .map(winningRecordDO -> {
+                    WinningRecordDTO winningRecordDTO = new WinningRecordDTO();
+                    winningRecordDTO.setWinnerId(winningRecordDO.getWinnerId());
+                    winningRecordDTO.setWinnerName(winningRecordDO.getWinnerName());
+                    winningRecordDTO.setPrizeName(winningRecordDO.getPrizeName());
+                    winningRecordDTO.setPrizeTier(ActivityPrizeTiersEnum
+                            .forName(winningRecordDO.getPrizeTier()));
+                    winningRecordDTO.setWinningTime(winningRecordDO.getWinningTime());
+                    return winningRecordDTO;
+                })
+                .collect(Collectors.toList());
     }
 
 
