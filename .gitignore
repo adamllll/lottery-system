@@ -33,7 +33,20 @@ build/
 .vscode/
 
 ### Project specific ###
-docs/
+docs/*
+!docs/抽奖系统测试报告.md
+!docs/抽奖系统测试报告.assets/
+docs/抽奖系统测试报告.assets/*
+!docs/抽奖系统测试报告.assets/image-20260329212359162.png
+!docs/抽奖系统测试报告.assets/image-20260329212456038.png
+!docs/抽奖系统测试报告.assets/image-20260329212624284.png
+!docs/抽奖系统测试报告.assets/image-20260329212747477.png
+!docs/抽奖系统测试报告.assets/image-20260329213650256.png
+!docs/抽奖系统测试报告.assets/image-20260329214944355.png
+!docs/抽奖系统测试报告.assets/image-20260329215043943.png
+!docs/抽奖系统测试报告.assets/image-20260329215433259.png
+!docs/抽奖系统测试报告.assets/image-20260329215449778.png
+!docs/抽奖系统测试报告.assets/image-20260329222333439.png
 .claude/
 
 ### Env files ###
