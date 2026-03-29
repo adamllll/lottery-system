@@ -2,7 +2,11 @@ package org.adam.lotterysystem;
 
 import org.adam.lotterysystem.common.exception.ServiceException;
 import org.adam.lotterysystem.common.utils.JacksonUtil;
-import org.adam.lotterysystem.controller.param.*;
+import org.adam.lotterysystem.controller.param.CreateActivityParam;
+import org.adam.lotterysystem.controller.param.CreatePrizeByActivityParam;
+import org.adam.lotterysystem.controller.param.CreateUserByActivityParam;
+import org.adam.lotterysystem.controller.param.DrawPrizeParam;
+import org.adam.lotterysystem.controller.param.ShowWinningRecordsParam;
 import org.adam.lotterysystem.dao.dataobject.ActivityDO;
 import org.adam.lotterysystem.dao.dataobject.ActivityPrizeDO;
 import org.adam.lotterysystem.dao.dataobject.ActivityUserDO;
@@ -29,7 +33,6 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
@@ -145,24 +148,21 @@ public class DrawPrizeTest {
 
     @Test
     void testSaveWinnerRecords() {
-        DrawPrizeParam param = new DrawPrizeParam();
-        param.setActivityId(24L);
-        param.setPrizeId(19L);
-        param.setWinningTime(new Date());
-        List<DrawPrizeParam.Winner> winnerList = new ArrayList<>();
-        DrawPrizeParam.Winner winner = new DrawPrizeParam.Winner();
-        winner.setUserId(43L);
-        winner.setUserName("lisi");
-        winnerList.add(winner);
-        param.setWinnerList(winnerList);
-        drawPrizeService.saveWinnerRecords(param);
+        Long activityId = createTestActivity("save-winner-records-test-");
+        DrawPrizeParam param = buildDrawPrizeParam(activityId);
+
+        List<WinningRecordDO> savedRecords = drawPrizeService.saveWinnerRecords(param);
+        List<WinningRecordDO> persistedRecords = winningRecordMapper.selectByActivityId(activityId);
+
+        assertAll(
+                () -> assertEquals(1, savedRecords.size(), "应只保存一条中奖记录"),
+                () -> assertEquals(1, persistedRecords.size(), "数据库中应只有一条中奖记录"),
+                () -> assertEquals(USER_ID, persistedRecords.get(0).getWinnerId(), "中奖用户应与测试数据一致"),
+                () -> assertEquals(activityId, persistedRecords.get(0).getActivityId(), "活动 ID 应与新建活动一致"),
+                () -> assertEquals(PRIZE_ID, persistedRecords.get(0).getPrizeId(), "奖品 ID 应与测试数据一致")
+        );
     }
 
-    // ==================== 辅助方法 ====================
-
-    /**
-     * 创建测试活动并返回活动ID
-     */
     private Long createTestActivity(String activityNamePrefix) {
         CreateActivityParam createActivityParam = new CreateActivityParam();
         createActivityParam.setActivityName(activityNamePrefix + System.currentTimeMillis());
@@ -183,9 +183,6 @@ public class DrawPrizeTest {
         return dto.getActivityId();
     }
 
-    /**
-     * 构造抽奖参数
-     */
     private DrawPrizeParam buildDrawPrizeParam(Long activityId) {
         DrawPrizeParam param = new DrawPrizeParam();
         param.setActivityId(activityId);
@@ -199,9 +196,6 @@ public class DrawPrizeTest {
         return param;
     }
 
-    /**
-     * 构造MQ消息
-     */
     private Map<String, String> buildMqMessage(DrawPrizeParam param) {
         return Map.of(
                 "messageId", UUID.randomUUID().toString(),
@@ -209,9 +203,6 @@ public class DrawPrizeTest {
         );
     }
 
-    /**
-     * 验证状态已回滚至初始状态
-     */
     private void assertStatusRolledBack(Long activityId) {
         ActivityDO afterActivity = activityMapper.selectById(activityId);
         ActivityPrizeDO afterPrize = activityPrizeMapper.selectByActivityPrizeId(activityId, PRIZE_ID);
@@ -220,21 +211,15 @@ public class DrawPrizeTest {
 
         assertAll(
                 () -> assertEquals(ActivityStatusEnum.RUNNING.name(), afterActivity.getStatus(),
-                        "活动状态应回滚为RUNNING"),
+                        "活动状态应回滚为 RUNNING"),
                 () -> assertEquals(ActivityPrizeStatusEnum.INIT.name(), afterPrize.getStatus(),
-                        "奖品状态应回滚为INIT"),
+                        "奖品状态应回滚为 INIT"),
                 () -> assertEquals(ActivityUSerStatusEnum.INIT.name(), afterUserList.get(0).getStatus(),
-                        "人员状态应回滚为INIT"),
-                () -> assertEquals(0, winningRecords.size(),
-                        "中奖记录应被清除")
+                        "人员状态应回滚为 INIT"),
+                () -> assertEquals(0, winningRecords.size(), "中奖记录应被清除")
         );
     }
 
-    // ==================== 集成测试：正向流程 ====================
-
-    /**
-     * 测试抽奖正向流程：绕过MQ，直接同步调用消费者处理方法
-     */
     @Test
     void testDrawPrizeHappyPath() {
         Long activityId = createTestActivity("draw-test-");
@@ -242,32 +227,24 @@ public class DrawPrizeTest {
 
         mqReceiver.process(buildMqMessage(param));
 
-        // 验证：中奖记录已持久化
         List<WinningRecordDO> winningRecords = winningRecordMapper.selectByActivityId(activityId);
         assertNotNull(winningRecords);
         assertFalse(winningRecords.isEmpty(), "中奖记录不应为空");
 
-        // 验证：状态已扭转
         ActivityPrizeDO afterPrize = activityPrizeMapper.selectByActivityPrizeId(activityId, PRIZE_ID);
-        assertEquals(ActivityPrizeStatusEnum.END.name(), afterPrize.getStatus(), "奖品状态应为END");
+        assertEquals(ActivityPrizeStatusEnum.END.name(), afterPrize.getStatus(), "奖品状态应为 END");
 
         List<ActivityUserDO> afterUserList = activityUserMapper.batchSelectByActivityUserIds(activityId, List.of(USER_ID));
         assertFalse(afterUserList.isEmpty());
-        assertEquals(ActivityUSerStatusEnum.END.name(), afterUserList.get(0).getStatus(), "人员状态应为END");
+        assertEquals(ActivityUSerStatusEnum.END.name(), afterUserList.get(0).getStatus(), "人员状态应为 END");
     }
 
-    // ==================== 集成测试：异常回滚 ====================
-
-    /**
-     * 测试saveWinnerRecords抛出未知异常时，状态和中奖记录回滚
-     */
     @Test
     void testDrawPrizeRollbackWhenSaveWinnerRecordsThrows() {
         Long activityId = createTestActivity("draw-rollback-test-");
         DrawPrizeParam param = buildDrawPrizeParam(activityId);
         Map<String, String> message = buildMqMessage(param);
 
-        // 用Mockito spy替换，仅让saveWinnerRecords抛出异常
         DrawPrizeService spyService = Mockito.spy(drawPrizeService);
         Mockito.doThrow(new IllegalStateException("mock save winner records failure"))
                 .when(spyService).saveWinnerRecords(any());
@@ -277,79 +254,49 @@ public class DrawPrizeTest {
             ReflectionTestUtils.setField(mqReceiver, "drawPrizeService", spyService);
 
             assertThrows(IllegalStateException.class, () -> mqReceiver.process(message));
-
             assertStatusRolledBack(activityId);
         } finally {
             ReflectionTestUtils.setField(mqReceiver, "drawPrizeService", originalService);
         }
     }
 
-    // ==================== 集成测试：异常重发（死信队列） ====================
-
-    /**
-     * 测试处理过程中发生异常时的消息重发流程：
-     * 消息堆积 -> 处理异常(回滚) -> 消息进入死信队列 -> DlxReceiver重发 -> 再次处理成功
-     *
-     * 模拟流程：
-     * 1. 第一次调用 MqReceiver.process()，saveWinnerRecords 抛出异常
-     * 2. 验证：状态和中奖记录已回滚至初始状态
-     * 3. 模拟 DlxReceiver 接收死信消息并重新投递（直接调用 mqReceiver.process()）
-     * 4. 验证：第二次处理成功，中奖记录已持久化，状态已扭转
-     */
     @Test
     void testMessageRedeliveryViaDlxWhenProcessFails() {
-        // ---- 准备阶段 ----
         Long activityId = createTestActivity("draw-dlx-retry-test-");
         DrawPrizeParam param = buildDrawPrizeParam(activityId);
         Map<String, String> message = buildMqMessage(param);
 
-        // ---- 第一次处理：模拟异常 ----
-        // 用 Mockito spy 让 saveWinnerRecords 仅在第一次调用时抛出异常
         DrawPrizeService spyService = Mockito.spy(drawPrizeService);
         Mockito.doThrow(new ServiceException(500, "mock: 保存中奖记录时数据库连接超时"))
-                .doCallRealMethod() // 第二次调用恢复真实逻辑
+                .doCallRealMethod()
                 .when(spyService).saveWinnerRecords(any());
 
         DrawPrizeService originalService = (DrawPrizeService) ReflectionTestUtils.getField(mqReceiver, "drawPrizeService");
         try {
             ReflectionTestUtils.setField(mqReceiver, "drawPrizeService", spyService);
 
-            // 第一次处理：预期抛出异常（消息会被 RabbitMQ nack，路由到死信队列）
             assertThrows(ServiceException.class, () -> mqReceiver.process(message),
                     "第一次处理应抛出异常，触发消息进入死信队列");
 
-            // 验证：回滚已执行，状态恢复为初始状态
             assertStatusRolledBack(activityId);
 
-            // ---- 第二次处理：模拟 DlxReceiver 重发后的重新消费 ----
-            // 生产环境中：DlxReceiver 从死信队列取出消息 -> convertAndSend 回原队列 -> MqReceiver 再次消费
-            // 测试中：直接再次调用 mqReceiver.process() 模拟重发后的重新处理
             mqReceiver.process(message);
 
-            // ---- 验证：第二次处理成功 ----
-            // 1. 中奖记录已持久化
             List<WinningRecordDO> winningRecords = winningRecordMapper.selectByActivityId(activityId);
             assertNotNull(winningRecords);
             assertFalse(winningRecords.isEmpty(), "重发后中奖记录应已持久化");
 
-            // 2. 奖品状态已扭转为 END
             ActivityPrizeDO afterPrize = activityPrizeMapper.selectByActivityPrizeId(activityId, PRIZE_ID);
-            assertEquals(ActivityPrizeStatusEnum.END.name(), afterPrize.getStatus(),
-                    "重发后奖品状态应为END");
+            assertEquals(ActivityPrizeStatusEnum.END.name(), afterPrize.getStatus(), "重发后奖品状态应为 END");
 
-            // 3. 人员状态已扭转为 END
             List<ActivityUserDO> afterUserList = activityUserMapper.batchSelectByActivityUserIds(activityId, List.of(USER_ID));
             assertFalse(afterUserList.isEmpty());
-            assertEquals(ActivityUSerStatusEnum.END.name(), afterUserList.get(0).getStatus(),
-                    "重发后人员状态应为END");
+            assertEquals(ActivityUSerStatusEnum.END.name(), afterUserList.get(0).getStatus(), "重发后人员状态应为 END");
         } finally {
             ReflectionTestUtils.setField(mqReceiver, "drawPrizeService", originalService);
         }
     }
 
-    /**
-     * 测试saveWinnerRecords抛出ServiceException时，状态和中奖记录回滚
-     */
     @Test
     void testDrawPrizeRollbackWhenSaveWinnerRecordsThrowsServiceException() {
         Long activityId = createTestActivity("draw-rollback-svc-test-");
@@ -365,24 +312,28 @@ public class DrawPrizeTest {
             ReflectionTestUtils.setField(mqReceiver, "drawPrizeService", spyService);
 
             assertThrows(ServiceException.class, () -> mqReceiver.process(message));
-
             assertStatusRolledBack(activityId);
         } finally {
             ReflectionTestUtils.setField(mqReceiver, "drawPrizeService", originalService);
         }
     }
 
-    /**
-     * 测试查询中奖记录接口，验证返回的中奖记录信息正确
-     */
     @Test
     void testShowWinningRecords() {
+        Long activityId = createTestActivity("show-winning-records-test-");
+        List<WinningRecordDO> savedRecords = drawPrizeService.saveWinnerRecords(buildDrawPrizeParam(activityId));
+
         ShowWinningRecordsParam param = new ShowWinningRecordsParam();
-        param.setActivityId(27L);
+        param.setActivityId(activityId);
         List<WinningRecordDTO> winningRecordDTOS = drawPrizeService.getRecords(param);
-        for (WinningRecordDTO dto : winningRecordDTOS) {
-            // 中奖者_奖品_等级
-            System.out.println(dto.getWinnerName() + "_" + dto.getPrizeName() + "_" + dto.getPrizeTier());
-        }
+
+        assertAll(
+                () -> assertEquals(1, winningRecordDTOS.size(), "应查询到一条中奖记录"),
+                () -> assertEquals(savedRecords.get(0).getWinnerId(), winningRecordDTOS.get(0).getWinnerId(), "中奖用户 ID 应一致"),
+                () -> assertEquals(savedRecords.get(0).getWinnerName(), winningRecordDTOS.get(0).getWinnerName(), "中奖用户名应一致"),
+                () -> assertEquals(savedRecords.get(0).getPrizeName(), winningRecordDTOS.get(0).getPrizeName(), "奖品名称应一致"),
+                () -> assertEquals(ActivityPrizeTiersEnum.forName(savedRecords.get(0).getPrizeTier()),
+                        winningRecordDTOS.get(0).getPrizeTier(), "奖品等级应一致")
+        );
     }
 }

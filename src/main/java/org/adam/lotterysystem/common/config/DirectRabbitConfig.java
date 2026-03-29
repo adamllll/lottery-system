@@ -44,7 +44,7 @@ public class DirectRabbitConfig {
      */
     @Bean
     DirectExchange directExchange() {
-        return new DirectExchange(DLX_EXCHANGE_NAME, true, false);
+        return new DirectExchange(EXCHANGE_NAME, true, false);
     }
 
     /**
@@ -81,7 +81,7 @@ public class DirectRabbitConfig {
      */
     @Bean
     DirectExchange dlxExchange() {
-        return new DirectExchange(EXCHANGE_NAME, true, false);
+        return new DirectExchange(DLX_EXCHANGE_NAME, true, false);
     }
 
     /**
