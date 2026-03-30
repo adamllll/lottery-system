@@ -482,7 +482,7 @@ void testMessageRedeliveryViaDlxWhenProcessFails() {
 
 验证中奖记录查询接口能正确返回数据。
 
-![DrawPrizeTest 自动化测试截图](./%E6%8A%BD%E5%A5%96%E7%B3%BB%E7%BB%9F%E6%B5%8B%E8%AF%95%E6%8A%A5%E5%91%8A.assets/image-20260329222333439.png)
+![DrawPrizeTest 自动化测试截图](./lottery-system-test-report.assets/image-20260329222333439.png)
 
 图 4-1 DrawPrizeTest 运行结果。测试类中的核心用例已全部通过，覆盖了异步抽奖、状态流转、中奖记录持久化、异常回滚以及死信队列重试等关键场景，能够较完整地反映抽奖主链路的稳定性。
 
@@ -531,7 +531,7 @@ void testCheckWithWrongCodeShouldFail() {
 | 基础设施 | 8 | 12 | 100% |
 | **合计** | **10** | **25** | **100%** |
 
-![DrawPrizeTest 自动化测试截图](./%E6%8A%BD%E5%A5%96%E7%B3%BB%E7%BB%9F%E6%B5%8B%E8%AF%95%E6%8A%A5%E5%91%8A.assets/image-20260329222333439.png)
+![DrawPrizeTest 自动化测试截图](./lottery-system-test-report.assets/image-20260329222333439.png)
 
 ---
 
@@ -578,23 +578,23 @@ void testCheckWithWrongCodeShouldFail() {
 
 本次手工联调选取了注册、登录、创建活动、发起抽奖、中奖记录查询 5 个关键接口进行留痕，覆盖了从用户进入系统到完成一次抽奖的主流程。
 
-![用户注册接口测试截图](./%E6%8A%BD%E5%A5%96%E7%B3%BB%E7%BB%9F%E6%B5%8B%E8%AF%95%E6%8A%A5%E5%91%8A.assets/image-20260329212359162.png)
+![用户注册接口测试截图](./lottery-system-test-report.assets/image-20260329212359162.png)
 
 图 5-1 用户注册接口测试结果。使用测试手机号、邮箱和本地调试验证码完成注册，接口返回 `code=200` 与新生成的 `userId`，说明注册参数校验和用户落库流程正常。
 
-![密码登录接口测试截图](./%E6%8A%BD%E5%A5%96%E7%B3%BB%E7%BB%9F%E6%B5%8B%E8%AF%95%E6%8A%A5%E5%91%8A.assets/image-20260329212456038.png)
+![密码登录接口测试截图](./lottery-system-test-report.assets/image-20260329212456038.png)
 
 图 5-2 密码登录接口测试结果。登录成功后返回 JWT Token，后续活动创建、抽奖等受保护接口均基于该 Token 完成鉴权。
 
-![创建活动接口测试截图](./%E6%8A%BD%E5%A5%96%E7%B3%BB%E7%BB%9F%E6%B5%8B%E8%AF%95%E6%8A%A5%E5%91%8A.assets/image-20260329212624284.png)
+![创建活动接口测试截图](./lottery-system-test-report.assets/image-20260329212624284.png)
 
 图 5-3 创建活动接口测试结果。请求体中携带活动名称、奖品列表和参与用户列表，接口成功返回 `activityId=36`，说明活动创建逻辑、活动与奖品/用户的关联保存均正常。
 
-![发起抽奖接口测试截图](./%E6%8A%BD%E5%A5%96%E7%B3%BB%E7%BB%9F%E6%B5%8B%E8%AF%95%E6%8A%A5%E5%91%8A.assets/image-20260329212747477.png)
+![发起抽奖接口测试截图](./lottery-system-test-report.assets/image-20260329212747477.png)
 
 图 5-4 发起抽奖接口测试结果。抽奖请求提交后接口立即返回成功，符合“前台快速响应、后台异步消费”的设计预期。
 
-![中奖记录查询接口测试截图](./%E6%8A%BD%E5%A5%96%E7%B3%BB%E7%BB%9F%E6%B5%8B%E8%AF%95%E6%8A%A5%E5%91%8A.assets/image-20260329213650256.png)
+![中奖记录查询接口测试截图](./lottery-system-test-report.assets/image-20260329213650256.png)
 
 图 5-5 中奖记录查询接口测试结果。以 `activityId=36` 查询到中奖用户 `lisi`、中奖奖品 `黄毛` 及中奖时间，说明中奖记录已成功落库，并能够按活动维度正常返回。
 
@@ -655,15 +655,15 @@ void testCheckWithWrongCodeShouldFail() {
 
 为了补充说明抽奖异步链路与缓存链路的实际运行情况，在接口联调完成后，进一步观察了 Redis 中奖记录缓存以及 RabbitMQ 队列状态。
 
-![Redis 中奖记录缓存截图](./%E6%8A%BD%E5%A5%96%E7%B3%BB%E7%BB%9F%E6%B5%8B%E8%AF%95%E6%8A%A5%E5%91%8A.assets/image-20260329215043943.png)
+![Redis 中奖记录缓存截图](./lottery-system-test-report.assets/image-20260329215043943.png)
 
 图 6-1 Redis 缓存验证结果。抽奖完成后生成了 `WinningRecords_36_19` 与 `WinningRecords_36` 两个 key，缓存内容中可直接看到中奖人 `lisi`、奖品 `黄毛` 和中奖时间，说明中奖记录缓存已按预期写入。
 
-![RabbitMQ DirectQueue 详情截图](./%E6%8A%BD%E5%A5%96%E7%B3%BB%E7%BB%9F%E6%B5%8B%E8%AF%95%E6%8A%A5%E5%91%8A.assets/image-20260329215433259.png)
+![RabbitMQ DirectQueue 详情截图](./lottery-system-test-report.assets/image-20260329215433259.png)
 
 图 6-2 RabbitMQ 业务队列 `DirectQueue` 运行状态。页面显示队列已创建、消费者在线，同时配置了死信交换机 `DlxDirectExchange`，说明抽奖消息的正常消费链路已经挂载完成。
 
-![RabbitMQ DlxDirectQueue 详情截图](./%E6%8A%BD%E5%A5%96%E7%B3%BB%E7%BB%9F%E6%B5%8B%E8%AF%95%E6%8A%A5%E5%91%8A.assets/image-20260329215449778.png)
+![RabbitMQ DlxDirectQueue 详情截图](./lottery-system-test-report.assets/image-20260329215449778.png)
 
 图 6-3 RabbitMQ 死信队列 `DlxDirectQueue` 运行状态。死信队列处于可用状态，可用于承接业务消费异常后的重试消息，和业务队列共同组成完整的消息重试链路。
 
@@ -719,7 +719,7 @@ graph LR
 
 ### 7.3 数据库存储验证截图
 
-![MySQL 用户表敏感字段截图](./%E6%8A%BD%E5%A5%96%E7%B3%BB%E7%BB%9F%E6%B5%8B%E8%AF%95%E6%8A%A5%E5%91%8A.assets/image-20260329214944355.png)
+![MySQL 用户表敏感字段截图](./lottery-system-test-report.assets/image-20260329214944355.png)
 
 图 7-1 MySQL 用户表敏感字段存储结果。可以看到 `phone_number` 字段在库中并不是明文手机号，而是经过 AES 处理后的密文；`password` 字段则以 SHA256 哈希串形式保存，满足敏感信息不明文落库的安全要求。
 
