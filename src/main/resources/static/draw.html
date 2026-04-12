@@ -303,33 +303,82 @@
                     alert("查询中奖记录失败！" + result.msg);
                 } else {
                     var luckRecords = result.data
-                    // 从names中移除幸运儿
-                    var luck = []
-                    // 获得需要删除的用户id
-                    var needRemoves = luckRecords.map(function(luckRecord) {
-                        return luckRecord.winnerId;
-                    });
-                    console.log("needRemoves" + JSON.stringify(needRemoves))
-                    console.log("names1" + JSON.stringify(names))
-                    // 从names中移除包含在luckRecords中的name对应的元素
-                    for (var i = 0; i < names.length; i++) {
-                        if (needRemoves.includes(names[i].userId)) {
-                            var tmp = names.splice(i, 1)  // 移除当前项，并更新索引i，因为后面的项会向前移动
-                            luck = luck.concat(tmp)
-                            console.log("tmp" + JSON.stringify(tmp))
-                            i--  // 减1以确保索引i仍然指向当前的项
+                    data.list = (luckRecords || []).map(function(luckRecord) {
+                        return {
+                            userId: luckRecord.winnerId,
+                            userName: luckRecord.winnerName
                         }
-                    }
-                    console.log("names2" + JSON.stringify(names))
-                    console.log("luck" + JSON.stringify(luck))
-                    // 只存放当前奖项的人员信息，下次抽奖会被覆盖
-                    data.list = luck.map(x => x)
+                    })
                     for (var i = 0; i < data.list.length; ++i) {
                         var span = document.createElement('span')
                         span.innerHTML = data.list[i].userName
                         list.appendChild(span)
                     }
                 }
+            }
+        });
+    }
+
+    function removeWinnersFromNames(winnerList) {
+        var winnerIds = winnerList.map(function(item) {
+            return item.userId;
+        });
+        names = names.filter(function(item) {
+            return !winnerIds.includes(item.userId);
+        });
+    }
+
+    function applyServerWinnerList(data, winnerList) {
+        data.list = winnerList.map(function(item) {
+            return {
+                userId: item.userId,
+                userName: item.userName
+            };
+        });
+        data.valid = false;
+        removeWinnersFromNames(data.list);
+        state = 'showList';
+        showList(data);
+        changeNextButtonText('已抽完，下一步');
+    }
+
+    function pollPrizeResult(data, remainTimes) {
+        $.ajax({
+            url: '/winning-records/show',
+            type: 'POST',
+            dataType: 'json',
+            contentType: 'application/json',
+            headers: {
+                'user_token': userToken
+            },
+            data: JSON.stringify({activityId: activityId, prizeId: data.prizeId}),
+            success: function(result) {
+                if (result.code != 200) {
+                    alert("查询中奖记录失败！" + result.msg);
+                    state = 'showPic';
+                    showPic(data);
+                    changeNextButtonText('开始抽奖');
+                    return;
+                }
+                if (result.data && result.data.length > 0) {
+                    applyServerWinnerList(data, result.data.map(function(item) {
+                        return {
+                            userId: item.winnerId,
+                            userName: item.winnerName
+                        };
+                    }));
+                    return;
+                }
+                if (remainTimes <= 1) {
+                    alert("抽奖结果仍在处理中，请稍后刷新页面查看");
+                    state = 'showPic';
+                    showPic(data);
+                    changeNextButtonText('开始抽奖');
+                    return;
+                }
+                window.setTimeout(function() {
+                    pollPrizeResult(data, remainTimes - 1);
+                }, 1000);
             }
         });
     }
@@ -363,24 +412,7 @@
         nextButton.textContent = text;
     }
 
-    function saveLuck() {
-        var data = steps[step]
-
-        var luckUserList = []
-        for (var i = 0; i < data.list.length; ++i) {
-            luckUserList.push({
-                userId: data.list[i].userId,
-                userName: data.list[i].userName
-            })
-        }
-
-        var drawPrizesData = {
-            activityId: activityId,
-            prizeId: data.prizeId,
-            winningTime: new Date(),
-            winnerList: luckUserList
-        };
-
+    function saveLuck(data) {
         // 发送AJAX请求
         $.ajax({
             url: '/draw-prize',
@@ -390,11 +422,23 @@
             headers: {
                 'user_token': userToken
             },
-            data: JSON.stringify(drawPrizesData),
+            data: JSON.stringify({
+                activityId: Number(activityId),
+                prizeId: data.prizeId
+            }),
             success: function(result) {
-                if (result.code != 200) {
-                    alert("抽奖失败！" + result.msg);
+                if (result.code === 200) {
+                    applyServerWinnerList(data, result.data.winnerList || []);
+                    return;
                 }
+                if (result.code === 202) {
+                    pollPrizeResult(data, 10);
+                    return;
+                }
+                alert("抽奖失败！" + result.msg);
+                state = 'showPic';
+                showPic(data);
+                changeNextButtonText('开始抽奖');
             },
             error:function(err){
                 console.log(err);
@@ -426,17 +470,11 @@
                 changeNextButtonText('已抽完，下一步')
             }
         } else if (state == 'showBlink') {
-            // 从names中移除幸运儿，并将幸运儿存放起来
-            var luck = names.splice(0, data.prizeAmount)
-            // 只存放当前奖项的人员信息，下次抽奖会被覆盖
-            data.list = luck.map(x => x)
-            console.log("data.list:" + JSON.stringify(data.list))
-            // 调用后端抽奖接口，保存中奖信息
-            saveLuck()
-            data.valid = false
-            state = 'showList'
-            showList(data)
-            changeNextButtonText('已抽完，下一步')
+            state = 'saving'
+            changeNextButtonText('抽奖中...')
+            saveLuck(data)
+        } else if (state == 'saving') {
+            return
         } else if (state == 'showList') {
             if (step < (steps.length - 1)) {
                 ++step
@@ -487,6 +525,26 @@
 
     // reloadConf函数用于重新加载配置文件。
     // 如果提供了回调函数func，则在文件读取完成后调用它。
+    function normalizePrize(prize) {
+        return {
+            prizeId: prize.prizeId != null ? prize.prizeId : prize.id,
+            prizeTierName: prize.prizeTierName || prize.tiers,
+            prizeAmount: prize.prizeAmount,
+            name: prize.name,
+            imageUrl: prize.imageUrl,
+            valid: prize.valid,
+            list: prize.list || []
+        }
+    }
+
+    function normalizeUser(user) {
+        return {
+            userId: user.userId,
+            userName: user.userName || user.UserName,
+            valid: user.valid
+        }
+    }
+
     function reloadConf(func) {
         // 发送AJAX请求
         $.ajax({
@@ -501,8 +559,12 @@
                 if (result.code != 200) {
                     alert("获取活动详情失败！" + result.msg);
                 } else {
-                    names = result.data.users;
-                    steps = result.data.prizes;
+                    names = (result.data.users || [])
+                        .map(normalizeUser)
+                        .filter(function(user) {
+                            return user.valid;
+                        });
+                    steps = (result.data.prizes || []).map(normalizePrize);
                     if (func) func();
                 }
             },

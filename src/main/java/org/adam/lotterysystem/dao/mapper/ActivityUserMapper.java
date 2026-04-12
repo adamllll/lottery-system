@@ -20,6 +20,10 @@ public interface ActivityUserMapper {
     @Select("select * from activity_user where activity_id = #{activityId}")
     List<ActivityUserDO> selectByActivityId(@Param("activityId") Long activityId);
 
+    @Select("select * from activity_user where activity_id = #{activityId} and status = #{status} order by user_id asc for update")
+    List<ActivityUserDO> selectByActivityIdAndStatusForUpdate(@Param("activityId") Long activityId,
+                                                              @Param("status") String status);
+
     @Select("<script>" +
             "select * from activity_user where activity_id = #{activityId} and user_id in " +
             "<foreach collection='userIds' item='userId' open='(' separator=',' close=')'>" +

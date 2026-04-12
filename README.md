@@ -135,7 +135,27 @@
 ### 抽奖
 
 - `POST /draw-prize`
+  - 请求体：
+
+    ```json
+    {
+      "activityId": 1,
+      "prizeId": 18
+    }
+    ```
+
+  - 成功返回：`code = 200`，`data` 中包含奖项信息、开奖时间和 `winnerList`
+  - 处理中返回：`code = 202`，`msg = "当前奖项正在处理中"`
+  - 候选人不足：`code = 404`
 - `POST /winning-records/show`
+  - 支持按活动维度查询全部中奖记录
+  - 也支持按 `activityId + prizeId` 查询单个奖项最终结果
+
+### 前后端职责
+
+- 前端负责发起 `/draw-prize` 命令和展示抽奖动画
+- 后端负责随机选人、状态流转、中奖记录落库和异步邮件通知
+- 当前奖项返回 `code = 202` 时，前端应轮询 `POST /winning-records/show`
 
 ## 数据表
 

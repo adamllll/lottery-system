@@ -1,27 +1,40 @@
 package org.adam.lotterysystem.service.impl;
 
 import cn.hutool.core.collection.CollectionUtil;
+import cn.hutool.core.date.DateUtil;
+import lombok.Data;
 import org.adam.lotterysystem.common.errorcode.ServiceErrorCodeConstants;
 import org.adam.lotterysystem.common.exception.ServiceException;
 import org.adam.lotterysystem.common.utils.JacksonUtil;
+import org.adam.lotterysystem.common.utils.MailUtil;
 import org.adam.lotterysystem.common.utils.RedisUtil;
 import org.adam.lotterysystem.controller.param.DrawPrizeParam;
+import org.adam.lotterysystem.controller.param.ExecuteDrawPrizeParam;
 import org.adam.lotterysystem.controller.param.ShowWinningRecordsParam;
 import org.adam.lotterysystem.dao.dataobject.*;
 import org.adam.lotterysystem.dao.mapper.*;
+import org.adam.lotterysystem.service.ActivityService;
 import org.adam.lotterysystem.service.DrawPrizeService;
+import org.adam.lotterysystem.service.activitystatus.ActivityStatusManager;
+import org.adam.lotterysystem.service.dto.DrawPrizeDTO;
+import org.adam.lotterysystem.service.dto.ConvertActivityStatusDTO;
 import org.adam.lotterysystem.service.dto.WinningRecordDTO;
 import org.adam.lotterysystem.service.enums.ActivityPrizeStatusEnum;
 import org.adam.lotterysystem.service.enums.ActivityPrizeTiersEnum;
 import org.adam.lotterysystem.service.enums.ActivityStatusEnum;
+import org.adam.lotterysystem.service.enums.ActivityUSerStatusEnum;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
 
+import java.security.SecureRandom;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -32,8 +45,11 @@ import static org.adam.lotterysystem.common.config.DirectRabbitConfig.ROUTING;
 public class DrawPrizeServiceImpl implements DrawPrizeService {
 
     private static final Logger logger = LoggerFactory.getLogger(DrawPrizeServiceImpl.class);
+    private static final String DRAW_PROCESSING_KEY_PREFIX = "DrawPrizeExecuting_";
+    private static final Long DRAW_PROCESSING_LOCK_EXPIRE_SECONDS = 30L;
     private final String WINNING_RECORDS_CACHE_KEY_PREFIX = "WinningRecords_"; // 中奖记录缓存 key 前缀
     private final Long WINNING_RECORD_CACHE_EXPIRE = 60L * 60L * 24L * 2L; // 中奖记录缓存过期时间，单位：秒
+    private final SecureRandom secureRandom = new SecureRandom();
 
     @Autowired
     private RabbitTemplate rabbitTemplate;
@@ -42,6 +58,8 @@ public class DrawPrizeServiceImpl implements DrawPrizeService {
     @Autowired
     private ActivityPrizeMapper activityPrizeMapper;
     @Autowired
+    private ActivityUserMapper activityUserMapper;
+    @Autowired
     private UserMapper userMapper;
     @Autowired
     private PrizeMapper prizeMapper;
@@ -49,6 +67,17 @@ public class DrawPrizeServiceImpl implements DrawPrizeService {
     private WinningRecordMapper winningRecordMapper;
     @Autowired
     private RedisUtil redisUtil;
+    @Autowired
+    private ActivityStatusManager activityStatusManager;
+    @Autowired
+    private ActivityService activityService;
+    @Autowired
+    private TransactionTemplate transactionTemplate;
+    @Autowired
+    @Qualifier("asyncServiceExecutor")
+    private ThreadPoolTaskExecutor threadPoolTaskExecutor;
+    @Autowired
+    private MailUtil mailUtil;
 
     @Override
     public void drawPrize(DrawPrizeParam param) {
@@ -59,6 +88,64 @@ public class DrawPrizeServiceImpl implements DrawPrizeService {
         // 发送消息 : 交换机，绑定的key，消息体
         rabbitTemplate.convertAndSend(EXCHANGE_NAME, ROUTING, map);
         logger.info("抽奖消息发送成功: {}", JacksonUtil.writeValueAsString(map));
+    }
+
+    @Override
+    public DrawPrizeDTO executeDraw(ExecuteDrawPrizeParam param) {
+        String lockKey = buildDrawProcessingKey(param.getActivityId(), param.getPrizeId());
+        String lockValue = UUID.randomUUID().toString();
+        DrawPrizeParam[] rollbackParamHolder = new DrawPrizeParam[1];
+        if (!redisUtil.setIfAbsent(lockKey, lockValue, DRAW_PROCESSING_LOCK_EXPIRE_SECONDS)) {
+            throw new ServiceException(ServiceErrorCodeConstants.DRAW_PRIZE_PROCESSING);
+        }
+        try {
+            DrawExecutionContext executionContext = transactionTemplate.execute(status -> {
+                ActivityDO activityDO = activityMapper.selectById(param.getActivityId());
+                ActivityPrizeDO activityPrizeDO = activityPrizeMapper
+                        .selectByActivityPrizeIdForUpdate(param.getActivityId(), param.getPrizeId());
+                validateExecuteDrawRequest(activityDO, activityPrizeDO);
+
+                List<ActivityUserDO> candidates = activityUserMapper
+                        .selectByActivityIdAndStatusForUpdate(param.getActivityId(), ActivityUSerStatusEnum.INIT.name());
+                if (candidates.size() < activityPrizeDO.getPrizeAmount()) {
+                    throw new ServiceException(ServiceErrorCodeConstants.DRAW_PRIZE_CANDIDATE_NOT_ENOUGH);
+                }
+
+                DrawPrizeParam drawPrizeParam = buildServerSelectedDrawParam(param, activityPrizeDO, candidates);
+                rollbackParamHolder[0] = drawPrizeParam;
+                List<WinningRecordDO> winningRecordDOS = finalizeDrawInTransaction(drawPrizeParam);
+
+                DrawExecutionContext context = new DrawExecutionContext();
+                context.setDrawPrizeParam(drawPrizeParam);
+                context.setWinningRecordDOS(winningRecordDOS);
+                return context;
+            });
+            if (executionContext == null) {
+                throw new IllegalStateException("draw execution context should not be null");
+            }
+            notifyWinnersAsync(executionContext.getWinningRecordDOS());
+            return buildDrawPrizeDTO(executionContext.getDrawPrizeParam(), executionContext.getWinningRecordDOS());
+        } catch (RuntimeException ex) {
+            cleanupAfterDrawFailure(rollbackParamHolder[0], param.getActivityId(), param.getPrizeId());
+            throw ex;
+        } finally {
+            redisUtil.delIfMatch(lockKey, lockValue);
+        }
+    }
+
+    @Override
+    public List<WinningRecordDO> finalizeDraw(DrawPrizeParam param) {
+        try {
+            List<WinningRecordDO> winningRecordDOS = transactionTemplate.execute(status -> finalizeDrawInTransaction(param));
+            if (winningRecordDOS == null) {
+                throw new IllegalStateException("winning record list should not be null");
+            }
+            notifyWinnersAsync(winningRecordDOS);
+            return winningRecordDOS;
+        } catch (RuntimeException ex) {
+            cleanupAfterDrawFailure(param, param.getActivityId(), param.getPrizeId());
+            throw ex;
+        }
     }
 
     @Override
@@ -271,5 +358,193 @@ public class DrawPrizeServiceImpl implements DrawPrizeService {
         } catch (Exception e) {
             logger.error("删除中奖者记录缓存发生异常: key:{}", WINNING_RECORDS_CACHE_KEY_PREFIX + key, e);
         }
+    }
+
+    private void validateExecuteDrawRequest(ActivityDO activityDO, ActivityPrizeDO activityPrizeDO) {
+        if (activityDO == null || activityPrizeDO == null) {
+            throw new ServiceException(ServiceErrorCodeConstants.DRAW_PRIZE_PARAM_ERROR);
+        }
+        if (ActivityPrizeStatusEnum.END.name().equalsIgnoreCase(activityPrizeDO.getStatus())) {
+            throw new ServiceException(ServiceErrorCodeConstants.DRAW_PRIZE_END);
+        }
+        if (ActivityStatusEnum.END.name().equalsIgnoreCase(activityDO.getStatus())) {
+            throw new ServiceException(ServiceErrorCodeConstants.DRAW_ACTIVITY_END);
+        }
+    }
+
+    private DrawPrizeParam buildServerSelectedDrawParam(ExecuteDrawPrizeParam param,
+                                                        ActivityPrizeDO activityPrizeDO,
+                                                        List<ActivityUserDO> candidates) {
+        List<ActivityUserDO> shuffledCandidates = new ArrayList<>(candidates);
+        Collections.shuffle(shuffledCandidates, secureRandom);
+
+        int prizeAmount = Math.toIntExact(activityPrizeDO.getPrizeAmount());
+        List<DrawPrizeParam.Winner> winners = shuffledCandidates.stream()
+                .limit(prizeAmount)
+                .map(activityUserDO -> {
+                    DrawPrizeParam.Winner winner = new DrawPrizeParam.Winner();
+                    winner.setUserId(activityUserDO.getUserId());
+                    winner.setUserName(activityUserDO.getUserName());
+                    return winner;
+                })
+                .collect(Collectors.toList());
+
+        DrawPrizeParam drawPrizeParam = new DrawPrizeParam();
+        drawPrizeParam.setActivityId(param.getActivityId());
+        drawPrizeParam.setPrizeId(param.getPrizeId());
+        drawPrizeParam.setWinningTime(new Date());
+        drawPrizeParam.setWinnerList(winners);
+        return drawPrizeParam;
+    }
+
+    private DrawPrizeDTO buildDrawPrizeDTO(DrawPrizeParam drawPrizeParam,
+                                           List<WinningRecordDO> winningRecordDOS) {
+        if (CollectionUtil.isEmpty(winningRecordDOS)) {
+            throw new IllegalStateException("winning record list should not be empty");
+        }
+
+        DrawPrizeDTO dto = new DrawPrizeDTO();
+        dto.setActivityId(drawPrizeParam.getActivityId());
+        dto.setPrizeId(drawPrizeParam.getPrizeId());
+        dto.setWinningTime(drawPrizeParam.getWinningTime());
+
+        WinningRecordDO firstRecord = winningRecordDOS.get(0);
+        dto.setPrizeName(firstRecord.getPrizeName());
+        dto.setPrizeTier(ActivityPrizeTiersEnum.forName(firstRecord.getPrizeTier()));
+        dto.setWinnerList(winningRecordDOS.stream().map(record -> {
+            DrawPrizeDTO.WinnerDTO winnerDTO = new DrawPrizeDTO.WinnerDTO();
+            winnerDTO.setUserId(record.getWinnerId());
+            winnerDTO.setUserName(record.getWinnerName());
+            return winnerDTO;
+        }).collect(Collectors.toList()));
+        return dto;
+    }
+
+    private List<WinningRecordDO> finalizeDrawInTransaction(DrawPrizeParam param) {
+        statusConvert(param);
+        return saveWinnerRecords(param);
+    }
+
+    private void notifyWinnersAsync(List<WinningRecordDO> winningRecordDOS) {
+        if (CollectionUtil.isEmpty(winningRecordDOS)) {
+            return;
+        }
+        try {
+            threadPoolTaskExecutor.execute(() -> sendMail(winningRecordDOS));
+        } catch (Exception e) {
+            logger.error("提交中奖通知任务失败", e);
+        }
+    }
+
+    private void sendMail(List<WinningRecordDO> winningRecordDOS) {
+        if (CollectionUtil.isEmpty(winningRecordDOS)) {
+            return;
+        }
+        for (WinningRecordDO winningRecordDO : winningRecordDOS) {
+            String context = "Hi," + winningRecordDO.getWinnerName()
+                    + "，恭喜你在：" + winningRecordDO.getActivityName()
+                    + "活动中抽中了奖品：" + ActivityPrizeTiersEnum.forName(winningRecordDO.getPrizeTier()).getMessage()
+                    + ": " + winningRecordDO.getPrizeName()
+                    + "获奖时间为：" + DateUtil.formatTime(winningRecordDO.getWinningTime()) + "请尽快联系管理员领取奖品！";
+            mailUtil.sendSampleMail(winningRecordDO.getWinnerEmail(), "抽奖中奖通知", context);
+        }
+    }
+
+    private void cleanupAfterDrawFailure(DrawPrizeParam rollbackParam, Long activityId, Long prizeId) {
+        rollbackStatusIfNecessary(rollbackParam);
+        try {
+            if (winnerNeedRollback(activityId, prizeId)) {
+                deleteWinnerRecords(activityId, prizeId);
+            }
+        } catch (Exception e) {
+            logger.error("清理中奖记录失败, activityId:{}, prizeId:{}", activityId, prizeId, e);
+        }
+        try {
+            if (activityId != null && activityMapper.selectById(activityId) != null) {
+                activityService.cacheActivity(activityId);
+            }
+        } catch (Exception e) {
+            logger.error("回刷活动缓存失败, activityId:{}", activityId, e);
+        }
+    }
+
+    private void rollbackStatusIfNecessary(DrawPrizeParam rollbackParam) {
+        if (!statusNeedRollback(rollbackParam)) {
+            return;
+        }
+        try {
+            activityStatusManager.rollbackHandlerEvent(buildRollbackStatusDTO(rollbackParam));
+        } catch (Exception e) {
+            logger.error("回滚抽奖状态失败, activityId:{}, prizeId:{}",
+                    rollbackParam.getActivityId(), rollbackParam.getPrizeId(), e);
+        }
+    }
+
+    private boolean statusNeedRollback(DrawPrizeParam rollbackParam) {
+        if (rollbackParam == null
+                || rollbackParam.getActivityId() == null
+                || rollbackParam.getPrizeId() == null) {
+            return false;
+        }
+        List<Long> winnerUserIds = extractWinnerUserIds(rollbackParam);
+        if (CollectionUtil.isEmpty(winnerUserIds)) {
+            return false;
+        }
+        ActivityPrizeDO activityPrizeDO = activityPrizeMapper.selectByActivityPrizeId(
+                rollbackParam.getActivityId(), rollbackParam.getPrizeId());
+        return activityPrizeDO != null
+                && ActivityPrizeStatusEnum.END.name().equalsIgnoreCase(activityPrizeDO.getStatus());
+    }
+
+    private boolean winnerNeedRollback(Long activityId, Long prizeId) {
+        if (activityId == null || prizeId == null) {
+            return false;
+        }
+        return winningRecordMapper.countByAPId(activityId, prizeId) > 0;
+    }
+
+    private ConvertActivityStatusDTO buildRollbackStatusDTO(DrawPrizeParam rollbackParam) {
+        ConvertActivityStatusDTO convertActivityStatusDTO = new ConvertActivityStatusDTO();
+        convertActivityStatusDTO.setActivityId(rollbackParam.getActivityId());
+        convertActivityStatusDTO.setTargetActivityStatus(ActivityStatusEnum.RUNNING);
+        convertActivityStatusDTO.setPrizeId(rollbackParam.getPrizeId());
+        convertActivityStatusDTO.setTargetPrizeStatus(ActivityPrizeStatusEnum.INIT);
+        convertActivityStatusDTO.setUserIds(extractWinnerUserIds(rollbackParam));
+        convertActivityStatusDTO.setTargetUserStatus(ActivityUSerStatusEnum.INIT);
+        return convertActivityStatusDTO;
+    }
+
+    private List<Long> extractWinnerUserIds(DrawPrizeParam rollbackParam) {
+        if (rollbackParam == null || CollectionUtil.isEmpty(rollbackParam.getWinnerList())) {
+            return Collections.emptyList();
+        }
+        return rollbackParam.getWinnerList().stream()
+                .map(DrawPrizeParam.Winner::getUserId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .collect(Collectors.toList());
+    }
+
+    private void statusConvert(DrawPrizeParam param) {
+        ConvertActivityStatusDTO convertActivityStatusDTO = new ConvertActivityStatusDTO();
+        convertActivityStatusDTO.setActivityId(param.getActivityId());
+        convertActivityStatusDTO.setTargetActivityStatus(ActivityStatusEnum.END);
+        convertActivityStatusDTO.setPrizeId(param.getPrizeId());
+        convertActivityStatusDTO.setTargetPrizeStatus(ActivityPrizeStatusEnum.END);
+        convertActivityStatusDTO.setUserIds(param.getWinnerList().stream()
+                .map(DrawPrizeParam.Winner::getUserId)
+                .collect(Collectors.toList()));
+        convertActivityStatusDTO.setTargetUserStatus(ActivityUSerStatusEnum.END);
+        activityStatusManager.handlerEvent(convertActivityStatusDTO);
+    }
+
+    private String buildDrawProcessingKey(Long activityId, Long prizeId) {
+        return DRAW_PROCESSING_KEY_PREFIX + activityId + "_" + prizeId;
+    }
+
+    @Data
+    private static class DrawExecutionContext {
+        private DrawPrizeParam drawPrizeParam;
+        private List<WinningRecordDO> winningRecordDOS;
     }
 }

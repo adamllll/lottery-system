@@ -24,6 +24,10 @@ public interface ActivityPrizeMapper {
     @Select("select * from activity_prize where activity_id = #{activityId} and prize_id = #{prizeId}")
     ActivityPrizeDO selectByActivityPrizeId(@Param("activityId") Long activityId, @Param("prizeId") Long prizeId);
 
+    @Select("select * from activity_prize where activity_id = #{activityId} and prize_id = #{prizeId} for update")
+    ActivityPrizeDO selectByActivityPrizeIdForUpdate(@Param("activityId") Long activityId,
+                                                     @Param("prizeId") Long prizeId);
+
     @Select("select count(1) from activity_prize where activity_id = #{activityId} and status = #{status}")
     int countPrize(@Param("activityId") Long activityId,
                    @Param("status") String status);

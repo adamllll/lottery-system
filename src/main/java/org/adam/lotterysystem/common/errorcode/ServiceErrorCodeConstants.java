@@ -39,6 +39,8 @@ public interface ServiceErrorCodeConstants {
     ErrorCode DRAW_ACTIVITY_END = new ErrorCode(401, "抽奖活动已结束");
     ErrorCode DRAW_PRIZE_END = new ErrorCode(402, "奖品已被抽取已结束");
     ErrorCode DRAW_PRIZE_WINNER_LIST_ERROR = new ErrorCode(403, "中奖者列表人数和中奖者人数不一致");
+    ErrorCode DRAW_PRIZE_PROCESSING = new ErrorCode(202, "当前奖项正在处理中");
+    ErrorCode DRAW_PRIZE_CANDIDATE_NOT_ENOUGH = new ErrorCode(404, "当前可抽取人员数量不足");
 
     // 图片错误码
      ErrorCode PICTURE_SAVE_ERROR = new ErrorCode(500, "图片保存失败");

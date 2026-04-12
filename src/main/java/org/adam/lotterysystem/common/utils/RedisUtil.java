@@ -5,16 +5,21 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
 
-import java.sql.Time;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.concurrent.TimeUnit;
 
 @Configuration
 public class RedisUtil {
     private static final Logger logger = LoggerFactory.getLogger(RedisUtil.class);
+    private static final DefaultRedisScript<Long> DELETE_IF_MATCH_SCRIPT = new DefaultRedisScript<>(
+            "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end",
+            Long.class);
+
     /**
      * 注入StringRedisTemplate对象，用于操作Redis数据库
      * RedisTemplate是Spring Data Redis提供的一个工具类，可以方便地进行Redis操作
@@ -61,6 +66,23 @@ public class RedisUtil {
     }
 
     /**
+     * 仅在 key 不存在时设置值，并设置过期时间
+     * @param key
+     * @param value
+     * @param time
+     * @return
+     */
+    public boolean setIfAbsent(String key, String value, Long time) {
+        try {
+            Boolean success = stringRedisTemplate.opsForValue().setIfAbsent(key, value, time, TimeUnit.SECONDS);
+            return Boolean.TRUE.equals(success);
+        } catch (Exception e) {
+            logger.error("Redis setIfAbsent error, setIfAbsent({}, {}, {})", key, value, time, e);
+            return false;
+        }
+    }
+
+    /**
      * 获取Redis键值对的方法，使用StringRedisTemplate的opsForValue()方法进行操作
      * @param key
      * @return
@@ -95,6 +117,28 @@ public class RedisUtil {
             return true;
         } catch (Exception e) {
             logger.error("Redis del error, del({})", key, e);
+            return false;
+        }
+    }
+
+    /**
+     * 当 value 匹配时删除 key，用于安全释放分布式锁
+     * @param key
+     * @param value
+     * @return
+     */
+    public boolean delIfMatch(String key, String value) {
+        try {
+            if (!StringUtils.hasText(key) || !StringUtils.hasText(value)) {
+                return false;
+            }
+            Long deleted = stringRedisTemplate.execute(
+                    DELETE_IF_MATCH_SCRIPT,
+                    Collections.singletonList(key),
+                    value);
+            return Long.valueOf(1L).equals(deleted);
+        } catch (Exception e) {
+            logger.error("Redis delIfMatch error, delIfMatch({}, {})", key, value, e);
             return false;
         }
     }

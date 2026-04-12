@@ -1,11 +1,14 @@
 package org.adam.lotterysystem;
 
+import org.adam.lotterysystem.common.errorcode.ServiceErrorCodeConstants;
 import org.adam.lotterysystem.common.exception.ServiceException;
 import org.adam.lotterysystem.common.utils.JacksonUtil;
+import org.adam.lotterysystem.common.utils.RedisUtil;
 import org.adam.lotterysystem.controller.param.CreateActivityParam;
 import org.adam.lotterysystem.controller.param.CreatePrizeByActivityParam;
 import org.adam.lotterysystem.controller.param.CreateUserByActivityParam;
 import org.adam.lotterysystem.controller.param.DrawPrizeParam;
+import org.adam.lotterysystem.controller.param.ExecuteDrawPrizeParam;
 import org.adam.lotterysystem.controller.param.ShowWinningRecordsParam;
 import org.adam.lotterysystem.dao.dataobject.ActivityDO;
 import org.adam.lotterysystem.dao.dataobject.ActivityPrizeDO;
@@ -20,6 +23,7 @@ import org.adam.lotterysystem.service.DrawPrizeService;
 import org.adam.lotterysystem.service.activitystatus.ActivityStatusManager;
 import org.adam.lotterysystem.service.dto.ConvertActivityStatusDTO;
 import org.adam.lotterysystem.service.dto.CreateActivityDTO;
+import org.adam.lotterysystem.service.dto.DrawPrizeDTO;
 import org.adam.lotterysystem.service.dto.WinningRecordDTO;
 import org.adam.lotterysystem.service.enums.ActivityPrizeStatusEnum;
 import org.adam.lotterysystem.service.enums.ActivityPrizeTiersEnum;
@@ -52,12 +56,18 @@ public class DrawPrizeTest {
     private static final Long PRIZE_ID = 18L;
     private static final Long USER_ID = 43L;
     private static final String USER_NAME = "lisi";
+    private static final Long SECOND_USER_ID = 44L;
+    private static final String SECOND_USER_NAME = "wangwu";
+    private static final String DRAW_PROCESSING_KEY_PREFIX = "DrawPrizeExecuting_";
 
     @Autowired
     private DrawPrizeService drawPrizeService;
 
     @Autowired
     private ActivityService activityService;
+
+    @Autowired
+    private RedisUtil redisUtil;
 
     @Autowired
     private ActivityStatusManager activityStatusManager;
@@ -90,6 +100,88 @@ public class DrawPrizeTest {
         param.setWinnerList(List.of(winner));
 
         drawPrizeService.drawPrize(param);
+    }
+
+    @Test
+    void testExecuteDrawReturnsServerSelectedWinners() {
+        Long activityId = createTestActivity(
+                "execute-draw-success-test-",
+                1L,
+                List.of(buildActivityUser(USER_ID, USER_NAME)));
+
+        ExecuteDrawPrizeParam param = buildExecuteDrawParam(activityId);
+
+        DrawPrizeDTO result = drawPrizeService.executeDraw(param);
+
+        assertAll(
+                () -> assertNotNull(result),
+                () -> assertEquals(activityId, result.getActivityId()),
+                () -> assertEquals(PRIZE_ID, result.getPrizeId()),
+                () -> assertEquals(1, result.getWinnerList().size()),
+                () -> assertEquals(USER_ID, result.getWinnerList().get(0).getUserId()),
+                () -> assertEquals(USER_NAME, result.getWinnerList().get(0).getUserName()),
+                () -> assertNotNull(result.getWinningTime())
+        );
+    }
+
+    @Test
+    void testExecuteDrawReturnsProcessingWhenLockExists() {
+        Long activityId = createTestActivity(
+                "execute-draw-processing-test-",
+                1L,
+                List.of(buildActivityUser(USER_ID, USER_NAME)));
+
+        String lockKey = buildDrawProcessingKey(activityId, PRIZE_ID);
+        redisUtil.set(lockKey, "occupied", 30L);
+
+        try {
+            ExecuteDrawPrizeParam param = buildExecuteDrawParam(activityId);
+
+            ServiceException exception = assertThrows(ServiceException.class,
+                    () -> drawPrizeService.executeDraw(param));
+
+            assertEquals(ServiceErrorCodeConstants.DRAW_PRIZE_PROCESSING.getCode(), exception.getCode());
+        } finally {
+            redisUtil.del(lockKey);
+        }
+    }
+
+    @Test
+    void testExecuteDrawRejectsRepeatedPrizeDraw() {
+        Long activityId = createTestActivity(
+                "execute-draw-repeat-test-",
+                1L,
+                List.of(buildActivityUser(USER_ID, USER_NAME)));
+
+        ExecuteDrawPrizeParam param = buildExecuteDrawParam(activityId);
+
+        drawPrizeService.executeDraw(param);
+
+        ServiceException exception = assertThrows(ServiceException.class,
+                () -> drawPrizeService.executeDraw(param));
+
+        assertEquals(ServiceErrorCodeConstants.DRAW_PRIZE_END.getCode(), exception.getCode());
+    }
+
+    @Test
+    void testExecuteDrawRejectsWhenNotEnoughEligibleUsers() {
+        Long activityId = createTestActivity(
+                "execute-draw-not-enough-test-",
+                2L,
+                List.of(
+                        buildActivityUser(USER_ID, USER_NAME),
+                        buildActivityUser(SECOND_USER_ID, SECOND_USER_NAME)));
+        activityUserMapper.batchUpdateStatus(
+                activityId,
+                List.of(SECOND_USER_ID),
+                ActivityUSerStatusEnum.END.name());
+
+        ExecuteDrawPrizeParam param = buildExecuteDrawParam(activityId);
+
+        ServiceException exception = assertThrows(ServiceException.class,
+                () -> drawPrizeService.executeDraw(param));
+
+        assertEquals(ServiceErrorCodeConstants.DRAW_PRIZE_CANDIDATE_NOT_ENOUGH.getCode(), exception.getCode());
     }
 
     @Test
@@ -164,23 +256,35 @@ public class DrawPrizeTest {
     }
 
     private Long createTestActivity(String activityNamePrefix) {
+        return createTestActivity(
+                activityNamePrefix,
+                1L,
+                List.of(buildActivityUser(USER_ID, USER_NAME)));
+    }
+
+    private Long createTestActivity(String activityNamePrefix,
+                                    Long prizeAmount,
+                                    List<CreateUserByActivityParam> userParams) {
         CreateActivityParam createActivityParam = new CreateActivityParam();
         createActivityParam.setActivityName(activityNamePrefix + System.currentTimeMillis());
         createActivityParam.setDescription(activityNamePrefix + " activity");
 
         CreatePrizeByActivityParam prizeParam = new CreatePrizeByActivityParam();
         prizeParam.setPrizeId(PRIZE_ID);
-        prizeParam.setPrizeAmount(1L);
+        prizeParam.setPrizeAmount(prizeAmount);
         prizeParam.setPrizeTiers(ActivityPrizeTiersEnum.FIRST_PRIZE.name());
         createActivityParam.setActivityPrizeList(List.of(prizeParam));
-
-        CreateUserByActivityParam userParam = new CreateUserByActivityParam();
-        userParam.setUserId(USER_ID);
-        userParam.setUserName(USER_NAME);
-        createActivityParam.setActivityUserList(List.of(userParam));
+        createActivityParam.setActivityUserList(userParams);
 
         CreateActivityDTO dto = activityService.createActivity(createActivityParam);
         return dto.getActivityId();
+    }
+
+    private ExecuteDrawPrizeParam buildExecuteDrawParam(Long activityId) {
+        ExecuteDrawPrizeParam param = new ExecuteDrawPrizeParam();
+        param.setActivityId(activityId);
+        param.setPrizeId(PRIZE_ID);
+        return param;
     }
 
     private DrawPrizeParam buildDrawPrizeParam(Long activityId) {
@@ -194,6 +298,17 @@ public class DrawPrizeTest {
         winner.setUserName(USER_NAME);
         param.setWinnerList(List.of(winner));
         return param;
+    }
+
+    private CreateUserByActivityParam buildActivityUser(Long userId, String userName) {
+        CreateUserByActivityParam userParam = new CreateUserByActivityParam();
+        userParam.setUserId(userId);
+        userParam.setUserName(userName);
+        return userParam;
+    }
+
+    private String buildDrawProcessingKey(Long activityId, Long prizeId) {
+        return DRAW_PROCESSING_KEY_PREFIX + activityId + "_" + prizeId;
     }
 
     private Map<String, String> buildMqMessage(DrawPrizeParam param) {
@@ -298,6 +413,28 @@ public class DrawPrizeTest {
     }
 
     @Test
+    void testMqReceiverDelegatesToFinalizeDraw() {
+        Long activityId = createTestActivity(
+                "mq-finalize-delegate-test-",
+                1L,
+                List.of(buildActivityUser(USER_ID, USER_NAME)));
+        DrawPrizeParam param = buildDrawPrizeParam(activityId);
+        Map<String, String> message = buildMqMessage(param);
+
+        DrawPrizeService spyService = Mockito.spy(drawPrizeService);
+        DrawPrizeService originalService = (DrawPrizeService) ReflectionTestUtils.getField(mqReceiver, "drawPrizeService");
+        try {
+            ReflectionTestUtils.setField(mqReceiver, "drawPrizeService", spyService);
+
+            mqReceiver.process(message);
+
+            Mockito.verify(spyService, Mockito.times(1)).finalizeDraw(any(DrawPrizeParam.class));
+        } finally {
+            ReflectionTestUtils.setField(mqReceiver, "drawPrizeService", originalService);
+        }
+    }
+
+    @Test
     void testDrawPrizeRollbackWhenSaveWinnerRecordsThrowsServiceException() {
         Long activityId = createTestActivity("draw-rollback-svc-test-");
         DrawPrizeParam param = buildDrawPrizeParam(activityId);
@@ -316,6 +453,24 @@ public class DrawPrizeTest {
         } finally {
             ReflectionTestUtils.setField(mqReceiver, "drawPrizeService", originalService);
         }
+    }
+
+    @Test
+    void testFinalizeDrawRollbackWhenSaveWinnerRecordsThrowsServiceException() {
+        Long activityId = createTestActivity(
+                "finalize-draw-rollback-test-",
+                1L,
+                List.of(buildActivityUser(USER_ID, USER_NAME)));
+        DrawPrizeParam param = buildDrawPrizeParam(activityId);
+
+        DrawPrizeService spyService = Mockito.spy(drawPrizeService);
+        Mockito.doThrow(new ServiceException(500, "mock save winner records failure"))
+                .when(spyService).saveWinnerRecords(any());
+
+        ServiceException exception = assertThrows(ServiceException.class, () -> spyService.finalizeDraw(param));
+
+        assertEquals(500, exception.getCode());
+        assertStatusRolledBack(activityId);
     }
 
     @Test
