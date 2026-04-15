@@ -95,9 +95,7 @@ public class DrawPrizeServiceImpl implements DrawPrizeService {
         String lockKey = buildDrawProcessingKey(param.getActivityId(), param.getPrizeId());
         String lockValue = UUID.randomUUID().toString();
         DrawPrizeParam[] rollbackParamHolder = new DrawPrizeParam[1];
-        if (!redisUtil.setIfAbsent(lockKey, lockValue, DRAW_PROCESSING_LOCK_EXPIRE_SECONDS)) {
-            throw new ServiceException(ServiceErrorCodeConstants.DRAW_PRIZE_PROCESSING);
-        }
+        acquireDrawLock(lockKey, lockValue);
         try {
             DrawExecutionContext executionContext = transactionTemplate.execute(status -> {
                 ActivityDO activityDO = activityMapper.selectById(param.getActivityId());
@@ -126,7 +124,9 @@ public class DrawPrizeServiceImpl implements DrawPrizeService {
             notifyWinnersAsync(executionContext.getWinningRecordDOS());
             return buildDrawPrizeDTO(executionContext.getDrawPrizeParam(), executionContext.getWinningRecordDOS());
         } catch (RuntimeException ex) {
-            cleanupAfterDrawFailure(rollbackParamHolder[0], param.getActivityId(), param.getPrizeId());
+            if (rollbackParamHolder[0] != null) {
+                cleanupAfterDrawFailure(rollbackParamHolder[0], param.getActivityId(), param.getPrizeId());
+            }
             throw ex;
         } finally {
             redisUtil.delIfMatch(lockKey, lockValue);
@@ -536,6 +536,18 @@ public class DrawPrizeServiceImpl implements DrawPrizeService {
                 .collect(Collectors.toList()));
         convertActivityStatusDTO.setTargetUserStatus(ActivityUSerStatusEnum.END);
         activityStatusManager.handlerEvent(convertActivityStatusDTO);
+    }
+
+    private void acquireDrawLock(String lockKey, String lockValue) {
+        try {
+            if (!redisUtil.setIfAbsent(lockKey, lockValue, DRAW_PROCESSING_LOCK_EXPIRE_SECONDS)) {
+                throw new ServiceException(ServiceErrorCodeConstants.DRAW_PRIZE_PROCESSING);
+            }
+        } catch (ServiceException e) {
+            throw e;
+        } catch (RuntimeException e) {
+            throw new ServiceException(ServiceErrorCodeConstants.DRAW_PRIZE_LOCK_ERROR);
+        }
     }
 
     private String buildDrawProcessingKey(Long activityId, Long prizeId) {

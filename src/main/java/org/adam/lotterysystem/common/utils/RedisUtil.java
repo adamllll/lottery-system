@@ -78,7 +78,7 @@ public class RedisUtil {
             return Boolean.TRUE.equals(success);
         } catch (Exception e) {
             logger.error("Redis setIfAbsent error, setIfAbsent({}, {}, {})", key, value, time, e);
-            return false;
+            throw new IllegalStateException("Redis setIfAbsent failed", e);
         }
     }
 

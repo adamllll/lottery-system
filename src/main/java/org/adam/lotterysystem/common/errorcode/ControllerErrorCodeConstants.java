@@ -15,5 +15,5 @@ public interface ControllerErrorCodeConstants {
     ErrorCode GET_ACTIVITY_DETAIL_ERROR = new ErrorCode(302, "查询活动详情失败");
 
     // 抽奖错误码
-    ErrorCode DRAW_PRIZE_FORBIDDEN = new ErrorCode(400, "仅管理员可以执行抽奖");
+    ErrorCode DRAW_PRIZE_FORBIDDEN = new ErrorCode(403, "仅管理员可以执行抽奖");
 }

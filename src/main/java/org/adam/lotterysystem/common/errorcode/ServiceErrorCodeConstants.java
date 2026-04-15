@@ -41,6 +41,7 @@ public interface ServiceErrorCodeConstants {
     ErrorCode DRAW_PRIZE_WINNER_LIST_ERROR = new ErrorCode(403, "中奖者列表人数和中奖者人数不一致");
     ErrorCode DRAW_PRIZE_PROCESSING = new ErrorCode(202, "当前奖项正在处理中");
     ErrorCode DRAW_PRIZE_CANDIDATE_NOT_ENOUGH = new ErrorCode(404, "当前可抽取人员数量不足");
+    ErrorCode DRAW_PRIZE_LOCK_ERROR = new ErrorCode(405, "抽奖锁获取失败，请稍后重试");
 
     // 图片错误码
      ErrorCode PICTURE_SAVE_ERROR = new ErrorCode(500, "图片保存失败");

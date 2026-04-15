@@ -45,7 +45,7 @@ class DrawPrizeControllerTest {
                         .header("user_token", token)
                         .content("{\"activityId\":1,\"prizeId\":18}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(400))
+                .andExpect(jsonPath("$.code").value(403))
                 .andExpect(jsonPath("$.msg").value("仅管理员可以执行抽奖"));
     }
 

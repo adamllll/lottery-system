@@ -47,7 +47,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 
 @SpringBootTest
 @Transactional
@@ -160,7 +162,12 @@ public class DrawPrizeTest {
         ServiceException exception = assertThrows(ServiceException.class,
                 () -> drawPrizeService.executeDraw(param));
 
-        assertEquals(ServiceErrorCodeConstants.DRAW_PRIZE_END.getCode(), exception.getCode());
+        List<WinningRecordDO> winningRecords = winningRecordMapper.selectByActivityId(activityId);
+
+        assertAll(
+                () -> assertEquals(ServiceErrorCodeConstants.DRAW_PRIZE_END.getCode(), exception.getCode()),
+                () -> assertEquals(1, winningRecords.size(), "重复抽奖不应删除已有中奖记录")
+        );
     }
 
     @Test
@@ -182,6 +189,30 @@ public class DrawPrizeTest {
                 () -> drawPrizeService.executeDraw(param));
 
         assertEquals(ServiceErrorCodeConstants.DRAW_PRIZE_CANDIDATE_NOT_ENOUGH.getCode(), exception.getCode());
+    }
+
+    @Test
+    void testExecuteDrawReturnsLockErrorWhenRedisUnavailable() {
+        Long activityId = createTestActivity(
+                "execute-draw-lock-error-test-",
+                1L,
+                List.of(buildActivityUser(USER_ID, USER_NAME)));
+
+        RedisUtil originalRedisUtil = (RedisUtil) ReflectionTestUtils.getField(drawPrizeService, "redisUtil");
+        RedisUtil mockRedisUtil = Mockito.mock(RedisUtil.class);
+        Mockito.when(mockRedisUtil.setIfAbsent(anyString(), anyString(), anyLong()))
+                .thenThrow(new IllegalStateException("redis unavailable"));
+
+        try {
+            ReflectionTestUtils.setField(drawPrizeService, "redisUtil", mockRedisUtil);
+
+            ServiceException exception = assertThrows(ServiceException.class,
+                    () -> drawPrizeService.executeDraw(buildExecuteDrawParam(activityId)));
+
+            assertEquals(ServiceErrorCodeConstants.DRAW_PRIZE_LOCK_ERROR.getCode(), exception.getCode());
+        } finally {
+            ReflectionTestUtils.setField(drawPrizeService, "redisUtil", originalRedisUtil);
+        }
     }
 
     @Test
