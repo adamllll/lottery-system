@@ -138,7 +138,7 @@
     // showPic函数用于显示图片和奖品信息。
     // 它将data.disc设置为disc元素的innerHTML，将data.image设置为image元素的src属性，然后显示图片并隐藏列表。
     function showPic(data) {
-        disc.innerHTML = data.prizeTierName + ' ' + data.name + ' ' + data.prizeAmount + '份'
+        disc.innerHTML = data.tiers + ' ' + data.name + ' ' + data.prizeAmount + '份'
         image.src = data.imageUrl ? data.imageUrl : '/pic/defaultPrizeImg.png'
         image.style.display = 'inline'
         list.style.display = 'none'
@@ -257,7 +257,7 @@
     // showBlink函数用于显示闪烁的文字。
     // 它首先设置奖品信息，隐藏图片，显示列表，然后创建与data.count相等数量的span元素。
     function showBlink(data) {
-        disc.innerHTML = data.prizeTierName + ' ' + data.name + ' ' + data.prizeAmount + '份'
+        disc.innerHTML = data.tiers + ' ' + data.name + ' ' + data.prizeAmount + '份'
         image.style.display = 'none'
         list.style.display = 'block'
         var spans = []
@@ -297,7 +297,7 @@
             headers: {
                 'user_token': userToken
             },
-            data: JSON.stringify({activityId: activityId, prizeId: data.prizeId}),
+            data: JSON.stringify({activityId: activityId, prizeId: data.id}),
             success: function(result) {
                 if (result.code != 200) {
                     alert("查询中奖记录失败！" + result.msg);
@@ -336,7 +336,7 @@
 
     // showList函数用于显示静态的文字列表。它设置奖品信息，隐藏图片，显示列表，并将data.list中的数据添加到列表中。
     function showList(data) {
-        disc.innerHTML = data.prizeTierName + ' ' + data.name + ' ' + data.prizeAmount + '份'
+        disc.innerHTML = data.tiers + ' ' + data.name + ' ' + data.prizeAmount + '份'
         image.style.display = 'none'
         list.style.display = 'block'
         while (list.hasChildNodes()) {
@@ -376,7 +376,7 @@
 
         var drawPrizesData = {
             activityId: activityId,
-            prizeId: data.prizeId,
+            prizeId: data.id,
             winningTime: new Date(),
             winnerList: luckUserList
         };
