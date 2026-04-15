@@ -69,7 +69,7 @@ public class GetActivityDetailResult implements Serializable {
         private Long userId;
 
         // 用户名称
-        private String UserName;
+        private String userName;
 
         // 用户是否有效
         private Boolean valid;

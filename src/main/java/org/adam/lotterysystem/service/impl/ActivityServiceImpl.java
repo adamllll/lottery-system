@@ -139,7 +139,7 @@ public class ActivityServiceImpl implements ActivityService {
         }
         try {
             String str = redisUtil.get(ACTIVITY_PREFIX + activityId);
-            if (StringUtils.hasText(str)) {
+            if (!StringUtils.hasText(str)) {
                 logger.info("获取缓存数据为空, key={}", ACTIVITY_PREFIX + activityId);
                 return null;
             }

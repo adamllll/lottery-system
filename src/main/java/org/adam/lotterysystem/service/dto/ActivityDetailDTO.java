@@ -71,7 +71,7 @@ public class ActivityDetailDTO {
         private Long userId;
 
         // 用户名称
-        private String UserName;
+        private String userName;
 
         // 用户状态
         private ActivityUSerStatusEnum status;
