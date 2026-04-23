@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)"
+LOCAL_JAVA_HOME="$ROOT_DIR/.local-jdk/current"
+
+if [ ! -x "$LOCAL_JAVA_HOME/bin/java" ] || [ ! -x "$LOCAL_JAVA_HOME/bin/javac" ]; then
+  echo "Project-local JDK is missing. Expected both java and javac under: $LOCAL_JAVA_HOME" >&2
+  exit 1
+fi
+
+export JAVA_HOME="$LOCAL_JAVA_HOME"
+export PATH="$JAVA_HOME/bin:$PATH"
+
+exec bash "$ROOT_DIR/mvnw" "$@"

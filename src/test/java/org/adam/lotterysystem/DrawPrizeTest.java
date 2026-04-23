@@ -505,6 +505,39 @@ public class DrawPrizeTest {
     }
 
     @Test
+    void testCheckDrawPrizeStatusShouldFailWhenActivityEnded() {
+        Long activityId = createTestActivity("draw-status-activity-end-test-");
+        activityMapper.updateStatus(activityId, ActivityStatusEnum.END.name());
+
+        DrawPrizeParam param = buildDrawPrizeParam(activityId);
+
+        assertFalse(drawPrizeService.checkDrawPrizeStatus(param), "活动已结束时应拦截抽奖请求");
+    }
+
+    @Test
+    void testCheckDrawPrizeStatusShouldFailWhenPrizeEnded() {
+        Long activityId = createTestActivity("draw-status-prize-end-test-");
+        activityPrizeMapper.updateStatus(activityId, PRIZE_ID, ActivityPrizeStatusEnum.END.name());
+
+        DrawPrizeParam param = buildDrawPrizeParam(activityId);
+
+        assertFalse(drawPrizeService.checkDrawPrizeStatus(param), "奖品已抽完时应拦截抽奖请求");
+    }
+
+    @Test
+    void testCheckDrawPrizeStatusShouldFailWhenWinnerCountMismatch() {
+        Long activityId = createTestActivity("draw-status-winner-count-test-");
+        DrawPrizeParam param = buildDrawPrizeParam(activityId);
+
+        DrawPrizeParam.Winner extraWinner = new DrawPrizeParam.Winner();
+        extraWinner.setUserId(999L);
+        extraWinner.setUserName("extra-user");
+        param.setWinnerList(List.of(param.getWinnerList().get(0), extraWinner));
+
+        assertFalse(drawPrizeService.checkDrawPrizeStatus(param), "中奖人数与奖项数量不一致时应拦截抽奖请求");
+    }
+
+    @Test
     void testShowWinningRecords() {
         Long activityId = createTestActivity("show-winning-records-test-");
         List<WinningRecordDO> savedRecords = drawPrizeService.saveWinnerRecords(buildDrawPrizeParam(activityId));
